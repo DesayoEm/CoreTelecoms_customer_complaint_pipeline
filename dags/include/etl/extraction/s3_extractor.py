@@ -24,78 +24,6 @@ class S3Extractor:
         self.s3_src_hook = s3_src_hook or S3Hook(aws_conn_id="aws_airflow_src_user")
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
 
-    def copy_customers_data(self) -> Dict[str, any]:
-        """Copies customer data from source S3 to destination S3."""
-        try:
-
-            src_bucket = config.SRC_BUCKET_NAME
-            src_key = config.SRC_CUSTOMERS_OBJ_KEY
-
-            log.info(f"Reading from s3://{src_bucket}/{src_key}")
-
-
-            file_content = self.s3_src_hook.read_key(
-                key=src_key,
-                bucket_name=src_bucket
-            )
-
-            current_execution_date = self.context.get('ds')
-            dest_bucket = config.CORETELECOMS_BUCKET_NAME
-            dest_key = f"{config.CUSTOMER_DATA_STAGING_DEST}/customers_dataset-{current_execution_date}.parquet"
-
-            metadata = self.convert_and_upload_to_s3(
-                data=file_content,
-                src_key=src_key,
-                dest_bucket=dest_bucket,
-                dest_key=dest_key
-            )
-
-            log.info(f"Successfully copied customers data: {metadata['row_count']} rows")
-            return metadata
-
-        except DataQualityWarning as e:
-            log.warning(f"Data quality issue with customers data: {str(e)}")
-            raise
-        except Exception as e:
-            log.error(f"Error ingesting customers data: {str(e)}")
-            raise DataIngestionError(f"Failed to copy customers data: {str(e)}") from e
-
-    def copy_call_log_data(self) -> Dict[str, any]:
-        """Copies call logs from source S3 to destination S3."""
-        try:
-            src_bucket = config.SRC_BUCKET_NAME
-            # src_key = config.SRC_CALL_LOGS_OBJ_KEY
-            src_key = "call logs/call_logs_day_2025-11-20.csv"
-
-            log.info(f"Reading from s3://{src_bucket}/{src_key}")
-
-
-            file_content = self.s3_src_hook.read_key(
-                key=src_key,
-                bucket_name=src_bucket
-            )
-
-            current_execution_date = self.context.get('ds')
-            dest_bucket = config.CORETELECOMS_BUCKET_NAME
-            dest_key = f"{config.CALL_LOGS_STAGING_DEST}/call_logs-{current_execution_date}.parquet"
-
-            metadata = self.convert_and_upload_to_s3(
-                data=file_content,
-                src_key=src_key,
-                dest_bucket=dest_bucket,
-                dest_key=dest_key
-            )
-
-            log.info(f"Successfully copied call logs for {current_execution_date}: {metadata['row_count']} rows")
-            return metadata
-
-        except DataQualityWarning as e:
-            log.warning(f"Data quality issue with call logs data: {str(e)}")
-            raise
-        except Exception as e:
-            log.error(f"Error ingesting customers data: {str(e)}")
-            raise DataIngestionError(f"Failed to copy call logs: {str(e)}") from e
-
 
 
     def convert_and_upload_to_s3(
@@ -192,7 +120,8 @@ class S3Extractor:
         self.s3_dest_hook.load_string(
             string_data=json.dumps(manifest, indent=2),
             key=manifest_key,
-            bucket_name=dest_bucket
+            bucket_name=dest_bucket,
+            replace=True
         )
 
 
@@ -205,3 +134,117 @@ class S3Extractor:
             "file_size_bytes": file_size_bytes,
             "format": "parquet"
         }
+
+    def copy_customers_data(self) -> Dict[str, any]:
+        """Copies customer data from source S3 to destination S3."""
+        try:
+
+            src_bucket = config.SRC_BUCKET_NAME
+            src_key = config.SRC_CUSTOMERS_OBJ_KEY
+
+            log.info(f"Reading from s3://{src_bucket}/{src_key}")
+
+
+            file_content = self.s3_src_hook.read_key(
+                key=src_key,
+                bucket_name=src_bucket
+            )
+
+            current_execution_date = self.context.get('ds')
+            dest_bucket = config.CORETELECOMS_BUCKET_NAME
+            dest_key = f"{config.CUSTOMER_DATA_STAGING_DEST}/customers_dataset-{current_execution_date}.parquet"
+
+            metadata = self.convert_and_upload_to_s3(
+                data=file_content,
+                src_key=src_key,
+                dest_bucket=dest_bucket,
+                dest_key=dest_key
+            )
+
+            log.info(f"Successfully copied customers data: {metadata['row_count']} rows")
+            return metadata
+
+        except DataQualityWarning as e:
+            log.warning(f"Data quality issue with customers data: {str(e)}")
+            raise
+        except Exception as e:
+            log.error(f"Error ingesting customers data: {str(e)}")
+            raise DataIngestionError(f"Failed to copy customers data: {str(e)}") from e
+
+
+    def copy_call_log_data(self) -> Dict[str, any]:
+        """Copies call logs from source S3 to destination S3."""
+        try:
+            src_bucket = config.SRC_BUCKET_NAME
+            # src_key = deterministic key to be configured
+            src_key = "call logs/call_logs_day_2025-11-20.csv"
+
+            log.info(f"Reading from s3://{src_bucket}/{src_key}")
+
+
+            file_content = self.s3_src_hook.read_key(
+                key=src_key,
+                bucket_name=src_bucket
+            )
+
+            current_execution_date = self.context.get('ds')
+            dest_bucket = config.CORETELECOMS_BUCKET_NAME
+            dest_key = f"{config.CALL_LOGS_STAGING_DEST}/call_logs-{current_execution_date}.parquet"
+
+            metadata = self.convert_and_upload_to_s3(
+                data=file_content,
+                src_key=src_key,
+                dest_bucket=dest_bucket,
+                dest_key=dest_key
+            )
+
+            log.info(f"Successfully copied call logs for {current_execution_date}: {metadata['row_count']} rows")
+            return metadata
+
+        except DataQualityWarning as e:
+            log.warning(f"Data quality issue with call logs data: {str(e)}")
+            raise
+        except Exception as e:
+            log.error(f"Error ingesting customers data: {str(e)}")
+            raise DataIngestionError(f"Failed to copy call logs: {str(e)}") from e
+
+
+
+    def copy_social_media_complaint_data(self) -> Dict[str, any]:
+        """Copies social media complaints from source S3 to destination S3."""
+        try:
+            src_bucket = config.SRC_BUCKET_NAME
+            # src_key = deterministic key to be configured
+            src_key = "social_medias/media_complaint_day_2025-11-20.json"
+
+            log.info(f"Reading from s3://{src_bucket}/{src_key}")
+
+
+            file_content = self.s3_src_hook.read_key(
+                key=src_key,
+                bucket_name=src_bucket
+            )
+
+            current_execution_date = self.context.get('ds')
+            dest_bucket = config.CORETELECOMS_BUCKET_NAME
+            dest_key = f"{config.SM_COMPLAINTS_STAGING_DEST}/sm-complaints-{current_execution_date}.parquet"
+
+            metadata = self.convert_and_upload_to_s3(
+                data=file_content,
+                src_key=src_key,
+                dest_bucket=dest_bucket,
+                dest_key=dest_key
+            )
+
+            log.info(f"Successfully copied social media complaints for {current_execution_date}: {metadata['row_count']} rows")
+            return metadata
+
+        except DataQualityWarning as e:
+            log.warning(f"Data quality issue with social media complaint data: {str(e)}")
+            raise
+        except Exception as e:
+            log.error(f"Error ingesting customers data: {str(e)}")
+            raise DataIngestionError(f"Failed to copy social media complaints data: {str(e)}") from e
+
+
+
