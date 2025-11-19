@@ -25,16 +25,24 @@ x-airflow-common:
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
 
     #custom env config
-    AIRFLOW_CONN_CLINEXA_DB: "postgresql://${DB_USER}:${DB_PASSWORD}@clinexa_db:5432/${DB_NAME}"
-    FIRST_PAGE_URL: ${FIRST_PAGE_URL}
-    BASE_URL: ${BASE_URL}
-
+    AIRFLOW_CONN_CORETELECOMS_DB: "postgresql://${DB_USER}:${DB_PASSWORD}@coretelecoms_db:5432/${DB_NAME}"
 
     #aws
     AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
     AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     AWS_REGION: ${AWS_REGION}
-    CTGOV_STAGING_BUCKET: ${CTGOV_STAGING_BUCKET}
+
+    SRC_ACCESS_KEY_ID: ${SRC_ACCESS_KEY_ID}
+    SRC_SECRET_ACCESS_KEY: ${SRC_SECRET_ACCESS_KEY}
+    SRC_REGION: ${SRC_REGION}
+
+    #buckets
+    CUSTOMER_DATA_STAGING_BUCKET: ${CUSTOMER_DATA_STAGING_BUCKET}
+    AGENT_DATA_STAGING_BUCKET: ${AGENT_DATA_STAGING_BUCKET}
+    CALL_LOGS_STAGING_BUCKET: ${CALL_LOGS_STAGING_BUCKET}
+    SM_COMPLAINTS_STAGING_BUCKET: ${SM_COMPLAINTS_STAGING_BUCKET}
+    WEB_COMPLAINTS_STAGING_BUCKET: ${WEB_COMPLAINTS_STAGING_BUCKET}
+
 
     DB_NAME: ${DB_NAME}
     DB_USER: ${DB_USER}
@@ -57,9 +65,9 @@ x-airflow-common:
       condition: service_healthy
 
 services:
-  coresentiment_db:
+  coretelecoms_db:
     image: postgres:15-alpine
-    container_name: clinexa-db
+    container_name: coretelecoms-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME}
