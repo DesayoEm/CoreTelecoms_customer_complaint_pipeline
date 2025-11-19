@@ -1,15 +1,15 @@
-resource "aws_s3_bucket" "customers-staging" {
-  bucket = "coretelecoms-customers-staging"
+resource "aws_s3_bucket" "coretelecoms-lake" {
+  bucket = "coretelecoms-data-lake"
   force_destroy = true
 
   tags = {
-    Name        = "CT gov bucket"
+    Name        = "CoreTelecoms Bucket"
     Environment = "Test"
   }
 }
 
-resource "aws_s3_bucket_versioning" "ctgov_versioning" {
-  bucket = aws_s3_bucket.customers-staging.id
+resource "aws_s3_bucket_versioning" "coretelecoms_versioning" {
+  bucket = aws_s3_bucket.coretelecoms-lake.id
   versioning_configuration {
     status = "Enabled"
   }
@@ -20,8 +20,8 @@ resource "aws_s3_bucket_versioning" "ctgov_versioning" {
 }
 
 
-resource "aws_s3_bucket_lifecycle_configuration" "ct_gov_archive_lifecycle" {
-  bucket = aws_s3_bucket.customers-staging.id
+resource "aws_s3_bucket_lifecycle_configuration" "coretelecoms_lake_archive_lifecycle" {
+  bucket = aws_s3_bucket.coretelecoms-lake.id
 
   rule {
     id     = "TransitionToStandardIA"
@@ -34,4 +34,5 @@ resource "aws_s3_bucket_lifecycle_configuration" "ct_gov_archive_lifecycle" {
   }
 
   }
+
 

@@ -29,10 +29,17 @@ def process_complaint_data():
 
         return extractor.copy_customers_data()
 
+    @task
+    def ingest_call_logs_task():
+        context = get_current_context()
+        extractor = S3Extractor(context=context)
+
+        return extractor.copy_call_log_data()
 
 
 
     ingest_customer_data = ingest_customer_data_task()
+    ingest_call_logs = ingest_call_logs_task()
 
 
 process_complaint_data()

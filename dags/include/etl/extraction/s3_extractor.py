@@ -1,5 +1,7 @@
 from typing import Dict
 import io
+import json
+from datetime import datetime
 import pandas as pd
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from include.config import config
@@ -38,10 +40,10 @@ class S3Extractor:
             )
 
             current_execution_date = self.context.get('ds')
-            dest_bucket = config.CUSTOMER_DATA_STAGING_BUCKET
-            dest_key = f"customer-data/customers_dataset-{current_execution_date}.parquet"
+            dest_bucket = config.CORETELECOMS_BUCKET_NAME
+            dest_key = f"{config.CUSTOMER_DATA_STAGING_DEST}/customers_dataset-{current_execution_date}.parquet"
 
-            metadata = self.convert_and_upload_to_parquet(
+            metadata = self.convert_and_upload_to_s3(
                 data=file_content,
                 src_key=src_key,
                 dest_bucket=dest_bucket,
@@ -58,8 +60,45 @@ class S3Extractor:
             log.error(f"Error ingesting customers data: {str(e)}")
             raise DataIngestionError(f"Failed to copy customers data: {str(e)}") from e
 
+    def copy_call_log_data(self) -> Dict[str, any]:
+        """Copies call logs from source S3 to destination S3."""
+        try:
+            src_bucket = config.SRC_BUCKET_NAME
+            # src_key = config.SRC_CALL_LOGS_OBJ_KEY
+            src_key = "call logs/call_logs_day_2025-11-20.csv"
 
-    def convert_and_upload_to_parquet(
+            log.info(f"Reading from s3://{src_bucket}/{src_key}")
+
+
+            file_content = self.s3_src_hook.read_key(
+                key=src_key,
+                bucket_name=src_bucket
+            )
+
+            current_execution_date = self.context.get('ds')
+            dest_bucket = config.CORETELECOMS_BUCKET_NAME
+            dest_key = f"{config.CALL_LOGS_STAGING_DEST}/call_logs-{current_execution_date}.parquet"
+
+            metadata = self.convert_and_upload_to_s3(
+                data=file_content,
+                src_key=src_key,
+                dest_bucket=dest_bucket,
+                dest_key=dest_key
+            )
+
+            log.info(f"Successfully copied call logs for {current_execution_date}: {metadata['row_count']} rows")
+            return metadata
+
+        except DataQualityWarning as e:
+            log.warning(f"Data quality issue with call logs data: {str(e)}")
+            raise
+        except Exception as e:
+            log.error(f"Error ingesting customers data: {str(e)}")
+            raise DataIngestionError(f"Failed to copy call logs: {str(e)}") from e
+
+
+
+    def convert_and_upload_to_s3(
             self,
             data: str | bytes,
             src_key: str,
@@ -130,6 +169,34 @@ class S3Extractor:
             f"Successfully uploaded to s3://{dest_bucket}/{dest_key} "
             f"({row_count} rows, {file_size_bytes / 1024 / 1024:.2f} MB)"
         )
+
+        manifest = {
+            'data_file': dest_key,
+            'created_at': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+            'metrics': {
+                'row_count': row_count,
+                'file_size_bytes': file_size_bytes
+            },
+            'lineage': {
+                'source_bucket': config.SRC_BUCKET_NAME,
+                'source_key': src_key,
+                'dag_id': self.context['dag'].dag_id,
+                'run_id': self.context['run_id'],
+                'actual_date': datetime.today().strftime('%Y-%m-%d'),
+                'execution_date': self.context['ds']
+            }
+        }
+
+        manifest_key = dest_key.replace('.parquet', '_manifest.json')
+
+        self.s3_dest_hook.load_string(
+            string_data=json.dumps(manifest, indent=2),
+            key=manifest_key,
+            bucket_name=dest_bucket
+        )
+
+
+        log.info(f"Metadata saved to s3://{dest_bucket}/{manifest_key}")
 
         return {
             "src_key": src_key,

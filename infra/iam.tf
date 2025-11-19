@@ -24,7 +24,7 @@ output "airflow_secret_access_key" {
 
 resource "aws_iam_policy" "s3_access" {
   name        = "customers-s3-access"
-  description = "Allow read/write to customers bucket"
+  description = "Allow read/write to specified buckets"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -38,8 +38,8 @@ resource "aws_iam_policy" "s3_access" {
           "s3:ListBucket"
         ]
         Resource = [
-          aws_s3_bucket.customers-staging.arn,
-          "${aws_s3_bucket.customers-staging.arn}/*"
+          aws_s3_bucket.coretelecoms-lake.arn,
+          "${aws_s3_bucket.coretelecoms-lake.arn}/*"
         ]
       }
     ]
