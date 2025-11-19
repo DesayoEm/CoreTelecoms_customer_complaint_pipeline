@@ -3,7 +3,7 @@ from pendulum import datetime
 from airflow.providers.amazon.aws.hooks.base_aws import AwsBaseHook
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.sdk.definitions.context import get_current_context
-from include.etl.extraction import Extractor
+from include.etl.extraction.s3_extractor import S3Extractor
 from include.config import config
 
 
@@ -23,16 +23,16 @@ log = LoggingMixin().log
 def process_complaint_data():
 
     @task
-    def extract_customer_data():
+    def ingest_customer_data_task():
         context = get_current_context()
-        s3_hook = S3Hook(aws_conn_id="aws_airflow_source_user")
+        extractor = S3Extractor(context=context)
 
-        e = Extractor(context=context, s3_hook=s3_hook)
-
-        return e.extract_customers()
+        return extractor.copy_customers_data()
 
 
-    extract_task = extract_customer_data()
+
+
+    ingest_customer_data = ingest_customer_data_task()
 
 
 process_complaint_data()
