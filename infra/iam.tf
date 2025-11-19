@@ -50,3 +50,28 @@ resource "aws_iam_user_policy_attachment" "airflow_s3" {
   user       = aws_iam_user.airflow_local.name
   policy_arn = aws_iam_policy.s3_access.arn
 }
+
+
+
+resource "aws_iam_policy" "airflow_secrets_access" {
+  name = "airflow-secrets-manager-access"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = aws_secretsmanager_secret.google_cloud_secrets.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_user_policy_attachment" "airflow_secrets" {
+  user       = aws_iam_user.airflow_local.name
+  policy_arn = aws_iam_policy.airflow_secrets_access.arn
+}

@@ -4,6 +4,8 @@ import json
 from datetime import datetime
 import pandas as pd
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+
+
 from include.config import config
 from include.exceptions.exceptions import (
     UnSupportedFileFormatError, EmptyDataFrameError, DataIngestionError, DataQualityWarning
@@ -151,7 +153,7 @@ class S3Extractor:
             )
 
             current_execution_date = self.context.get('ds')
-            dest_bucket = config.CORETELECOMS_BUCKET_NAME
+            dest_bucket = config.BRONZE_BUCKET
             dest_key = f"{config.CUSTOMER_DATA_STAGING_DEST}/customers_dataset-{current_execution_date}.parquet"
 
             metadata = self.convert_and_upload_to_s3(
@@ -188,7 +190,7 @@ class S3Extractor:
             )
 
             current_execution_date = self.context.get('ds')
-            dest_bucket = config.CORETELECOMS_BUCKET_NAME
+            dest_bucket = config.BRONZE_BUCKET
             dest_key = f"{config.CALL_LOGS_STAGING_DEST}/call_logs-{current_execution_date}.parquet"
 
             metadata = self.convert_and_upload_to_s3(
@@ -226,7 +228,7 @@ class S3Extractor:
             )
 
             current_execution_date = self.context.get('ds')
-            dest_bucket = config.CORETELECOMS_BUCKET_NAME
+            dest_bucket = config.BRONZE_BUCKET
             dest_key = f"{config.SM_COMPLAINTS_STAGING_DEST}/sm-complaints-{current_execution_date}.parquet"
 
             metadata = self.convert_and_upload_to_s3(

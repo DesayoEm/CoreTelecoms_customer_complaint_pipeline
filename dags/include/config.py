@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     DB_PASSWORD: str
     DB_CONN_STR: str
 
+    #google
+    GOOGLE_SHEET_ID: str
+    GOOGLE_SERVICE_ACCOUNT_PATH: str
+
     #aws
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str
@@ -19,7 +23,7 @@ class Settings(BaseSettings):
     SRC_REGION: str
 
     #bucket keys
-    CORETELECOMS_BUCKET_NAME: str
+    BRONZE_BUCKET: str
     CUSTOMER_DATA_STAGING_DEST: str
     AGENT_DATA_STAGING_DEST: str
     CALL_LOGS_STAGING_DEST: str
