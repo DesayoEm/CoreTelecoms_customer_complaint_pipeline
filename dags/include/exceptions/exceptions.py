@@ -22,3 +22,11 @@ class GoogleCredentialsError(DataIngestionError):
         message = f"Could not retrieve Google service account credentials from AWS Secrets Manager{details}"
         super().__init__(message)
         self.log = message
+
+
+class GoogleSheetReadError(DataIngestionError):
+    """Raised when an attempt to read a Google Sheet fails"""
+    def __init__(self, details: str):
+        message = f"{details}"
+        super().__init__(message)
+        self.log = message

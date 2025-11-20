@@ -10,7 +10,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 from include.config import config
 from include.exceptions.exceptions import (
-    UnSupportedFileFormatError, EmptyDataFrameError, DataIngestionError, DataQualityWarning, GoogleCredentialsError
+    UnSupportedFileFormatError, EmptyDataFrameError, DataIngestionError, DataQualityWarning, GoogleCredentialsError,
+    GoogleSheetReadError
 )
 from airflow.utils.log.logging_mixin import LoggingMixin
 
@@ -26,12 +27,15 @@ class GoogleSheetsExtractor:
         self.context = context
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
 
+        service_account_info = self.get_google_credentials()
+
         scope = [
             "https://www.googleapis.com/auth/spreadsheets.readonly",
             "https://www.googleapis.com/auth/drive.readonly"
         ]
-        creds = ServiceAccountCredentials.from_json_keyfile_name(
-            config.GOOGLE_SERVICE_ACCOUNT_PATH,  
+
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            service_account_info,
             scopes=scope
         )
         self.google_client = gspread.authorize(creds)
@@ -39,11 +43,12 @@ class GoogleSheetsExtractor:
 
     @staticmethod
     def get_google_credentials() -> dict:
-        """Retrieve Google service account credentials from AWS Secrets Manager."""
+        """Retrieve Google account credentials from aws secrets manager."""
         try:
             session = boto3.session.Session()
             client = session.client(
                 service_name='secretsmanager',
+                region_name=config.AWS_REGION
             )
 
             response = client.get_secret_value(SecretId='google_cloud_cred')
@@ -61,7 +66,7 @@ class GoogleSheetsExtractor:
             dest_bucket: str,
             dest_key: str
     ) -> Dict[str, any]:
-        """Converts DataFrame to Parquet and uploads to S3 with manifest."""
+        """Converts DataFrame to Parquet and uploads to S3 with metadata."""
 
         if df.empty:
             raise EmptyDataFrameError(source_name)
@@ -78,13 +83,7 @@ class GoogleSheetsExtractor:
             file_obj=buffer,
             key=dest_key,
             bucket_name=dest_bucket,
-            replace=True,
-            metadata={
-                'source': 'google_sheets',
-                'row_count': str(row_count),
-                'ingestion_date': self.context['ds'],
-                'dag_id': self.context['dag'].dag_id
-            }
+            replace=True
         )
 
         log.info(
@@ -129,6 +128,8 @@ class GoogleSheetsExtractor:
             "format": "parquet"
         }
 
+
+
     def copy_agents_data(self) -> Dict[str, any]:
         """Extracts agent data from Google Sheets and uploads to S3."""
         try:
@@ -157,10 +158,12 @@ class GoogleSheetsExtractor:
 
         except gspread.exceptions.SpreadsheetNotFound:
             log.error(f"Google Sheet not found: {config.GOOGLE_SHEET_ID}")
-            raise DataIngestionError(f"Google Sheet not found: {config.GOOGLE_SHEET_ID}")
+            raise GoogleSheetReadError(f"Google Sheet not found: {config.GOOGLE_SHEET_ID}")
+
         except gspread.exceptions.APIError as e:
             log.error(f"Google Sheets API error: {str(e)}")
-            raise DataIngestionError(f"Google Sheets API error: {str(e)}") from e
+            raise GoogleSheetReadError(f"Google Sheets API error: {str(e)}") from e
+
         except Exception as e:
             log.error(f"Error ingesting agents data: {str(e)}")
-            raise DataIngestionError(f"Failed to copy agents data: {str(e)}") from e
+            raise GoogleSheetReadError(f"Failed to copy agents data: {str(e)}") from e
