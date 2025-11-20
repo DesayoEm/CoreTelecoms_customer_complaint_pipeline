@@ -1,11 +1,9 @@
 from airflow.sdk import dag, task
 from pendulum import datetime
-from airflow.providers.amazon.aws.hooks.base_aws import AwsBaseHook
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.sdk.definitions.context import get_current_context
 from include.etl.extraction.s3_extractor import S3Extractor
 from include.etl.extraction.google_extractor import GoogleSheetsExtractor
-from include.config import config
+from include.etl.extraction.sql_extractor import SQLEXtractor
 
 
 from airflow.utils.log.logging_mixin import LoggingMixin
@@ -43,7 +41,7 @@ def process_complaint_data():
         return extractor.copy_call_log_data()
 
     @task
-    def ingest_sm_complaint_task():
+    def ingest_sm_complaints_task():
         context = get_current_context()
         extractor = S3Extractor(context=context)
 
@@ -55,12 +53,20 @@ def process_complaint_data():
         extractor = GoogleSheetsExtractor(context=context)
 
         return extractor.copy_agents_data()
+
+    @task
+    def ingest_web_complaints_data_task():
+        context = get_current_context()
+        extractor = SQLEXtractor(context=context)
+
+        return extractor.copy_web_complaints()
     
 
     ingest_customer_data = ingest_customer_data_task()
     ingest_call_logs = ingest_call_logs_task()
-    ingest_sm_complaint = ingest_sm_complaint_task()
+    ingest_sm_complaints = ingest_sm_complaints_task()
     ingest_agents_data = ingest_agents_data_task()
+    ingest_web_complaints_data = ingest_web_complaints_data_task()
 
 
 process_complaint_data()

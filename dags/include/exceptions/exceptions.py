@@ -30,3 +30,10 @@ class GoogleSheetReadError(DataIngestionError):
         message = f"{details}"
         super().__init__(message)
         self.log = message
+
+class SQLReadError(DataIngestionError):
+    """Raised when an attempt to read an SQL table fails"""
+    def __init__(self, details: str):
+        message = f"{details}"
+        super().__init__(message)
+        self.log = message

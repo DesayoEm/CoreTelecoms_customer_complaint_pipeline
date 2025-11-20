@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     SRC_ACCESS_KEY_ID: str
     SRC_SECRET_ACCESS_KEY: str
     SRC_REGION: str
+    SRC_DB_CONN_STRING: str
+    SRC_DB_SCHEMA: str
 
     #bucket keys
     BRONZE_BUCKET: str

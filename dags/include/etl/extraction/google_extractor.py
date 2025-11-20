@@ -10,7 +10,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 from include.config import config
 from include.exceptions.exceptions import (
-    UnSupportedFileFormatError, EmptyDataFrameError, DataIngestionError, DataQualityWarning, GoogleCredentialsError,
+    UnSupportedFileFormatError, EmptyDataFrameError, DataIngestionError, GoogleCredentialsError,
     GoogleSheetReadError
 )
 from airflow.utils.log.logging_mixin import LoggingMixin

@@ -7,9 +7,7 @@ from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
 
 from include.config import config
-from include.exceptions.exceptions import (
-    UnSupportedFileFormatError, EmptyDataFrameError, DataIngestionError, DataQualityWarning
-)
+from include.exceptions.exceptions import UnSupportedFileFormatError, EmptyDataFrameError, DataQualityWarning
 from airflow.utils.log.logging_mixin import LoggingMixin
 
 log = LoggingMixin().log
