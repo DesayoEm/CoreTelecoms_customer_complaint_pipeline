@@ -10,8 +10,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 from include.config import config
 from include.exceptions.exceptions import (
-    UnSupportedFileFormatError, EmptyDataFrameError, DataIngestionError, GoogleCredentialsError,
-    GoogleSheetReadError
+    UnSupportedFileFormatError,
+    EmptyDataFrameError,
+    DataIngestionError,
+    GoogleCredentialsError,
+    GoogleSheetReadError,
 )
 from airflow.utils.log.logging_mixin import LoggingMixin
 
@@ -19,11 +22,7 @@ log = LoggingMixin().log
 
 
 class GoogleSheetsExtractor:
-    def __init__(
-            self,
-            context: Dict,
-            s3_dest_hook: S3Hook = None
-    ):
+    def __init__(self, context: Dict, s3_dest_hook: S3Hook = None):
         self.context = context
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
 
@@ -31,15 +30,13 @@ class GoogleSheetsExtractor:
 
         scope = [
             "https://www.googleapis.com/auth/spreadsheets.readonly",
-            "https://www.googleapis.com/auth/drive.readonly"
+            "https://www.googleapis.com/auth/drive.readonly",
         ]
 
         creds = ServiceAccountCredentials.from_json_keyfile_dict(
-            service_account_info,
-            scopes=scope
+            service_account_info, scopes=scope
         )
         self.google_client = gspread.authorize(creds)
-
 
     @staticmethod
     def get_google_credentials() -> dict:
@@ -47,24 +44,20 @@ class GoogleSheetsExtractor:
         try:
             session = boto3.session.Session()
             client = session.client(
-                service_name='secretsmanager',
-                region_name=config.AWS_REGION
+                service_name="secretsmanager", region_name=config.AWS_REGION
             )
 
-            response = client.get_secret_value(SecretId='google_cloud_cred')
-            return json.loads(response['SecretString'])
+            response = client.get_secret_value(SecretId="google_cloud_cred")
+            return json.loads(response["SecretString"])
 
         except Exception as e:
-            log.error(f"Failed to retrieve Google credentials from Secrets Manager: {str(e)}")
+            log.error(
+                f"Failed to retrieve Google credentials from Secrets Manager: {str(e)}"
+            )
             raise GoogleCredentialsError(details=str(e))
 
-
     def upload_dataframe_to_s3(
-            self,
-            df: pd.DataFrame,
-            source_name: str,
-            dest_bucket: str,
-            dest_key: str
+        self, df: pd.DataFrame, source_name: str, dest_bucket: str, dest_key: str
     ) -> Dict[str, any]:
         """Converts DataFrame to Parquet and uploads to S3 with metadata."""
 
@@ -75,15 +68,12 @@ class GoogleSheetsExtractor:
         log.info(f"Processing {row_count} rows from {source_name}")
 
         buffer = io.BytesIO()
-        df.to_parquet(buffer, engine='pyarrow', index=False, compression='snappy')
+        df.to_parquet(buffer, engine="pyarrow", index=False, compression="snappy")
         file_size_bytes = buffer.tell()
         buffer.seek(0)
 
         self.s3_dest_hook.load_file_obj(
-            file_obj=buffer,
-            key=dest_key,
-            bucket_name=dest_bucket,
-            replace=True
+            file_obj=buffer, key=dest_key, bucket_name=dest_bucket, replace=True
         )
 
         log.info(
@@ -92,28 +82,28 @@ class GoogleSheetsExtractor:
         )
 
         manifest = {
-            'data_file': dest_key,
-            'created_at': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
-            'metrics': {
-                'row_count': row_count,
-                'file_size_bytes': file_size_bytes,
-                'columns': list(df.columns)
+            "data_file": dest_key,
+            "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "metrics": {
+                "row_count": row_count,
+                "file_size_bytes": file_size_bytes,
+                "columns": list(df.columns),
             },
-            'lineage': {
-                'source_type': 'google_sheets',
-                'source_name': source_name,
-                'dag_id': self.context['dag'].dag_id,
-                'run_id': self.context['run_id'],
-                'execution_date': self.context['ds']
-            }
+            "lineage": {
+                "source_type": "google_sheets",
+                "source_name": source_name,
+                "dag_id": self.context["dag"].dag_id,
+                "run_id": self.context["run_id"],
+                "execution_date": self.context["ds"],
+            },
         }
 
-        manifest_key = dest_key.replace('.parquet', '_manifest.json')
+        manifest_key = dest_key.replace(".parquet", "_manifest.json")
         self.s3_dest_hook.load_string(
             string_data=json.dumps(manifest, indent=2),
             key=manifest_key,
             bucket_name=dest_bucket,
-            replace=True
+            replace=True,
         )
 
         log.info(f"Metadata saved to s3://{dest_bucket}/{manifest_key}")
@@ -125,10 +115,8 @@ class GoogleSheetsExtractor:
             "manifest_key": manifest_key,
             "row_count": row_count,
             "file_size_bytes": file_size_bytes,
-            "format": "parquet"
+            "format": "parquet",
         }
-
-
 
     def copy_agents_data(self) -> Dict[str, any]:
         """Extracts agent data from Google Sheets and uploads to S3."""
@@ -142,7 +130,7 @@ class GoogleSheetsExtractor:
 
             log.info(f"Extracted {len(df)} agent records from Google Sheets")
 
-            current_execution_date = self.context.get('ds')
+            current_execution_date = self.context.get("ds")
             dest_bucket = config.BRONZE_BUCKET
             dest_key = f"{config.AGENT_DATA_STAGING_DEST}/agents_{current_execution_date}.parquet"
 
@@ -150,7 +138,7 @@ class GoogleSheetsExtractor:
                 df=df,
                 source_name=f"google_sheets:{sheet_id}",
                 dest_bucket=dest_bucket,
-                dest_key=dest_key
+                dest_key=dest_key,
             )
 
             log.info(f"Successfully copied agents data: {metadata['row_count']} rows")
@@ -158,7 +146,9 @@ class GoogleSheetsExtractor:
 
         except gspread.exceptions.SpreadsheetNotFound:
             log.error(f"Google Sheet not found: {config.GOOGLE_SHEET_ID}")
-            raise GoogleSheetReadError(f"Google Sheet not found: {config.GOOGLE_SHEET_ID}")
+            raise GoogleSheetReadError(
+                f"Google Sheet not found: {config.GOOGLE_SHEET_ID}"
+            )
 
         except gspread.exceptions.APIError as e:
             log.error(f"Google Sheets API error: {str(e)}")

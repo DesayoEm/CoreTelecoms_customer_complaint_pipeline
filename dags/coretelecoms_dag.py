@@ -7,6 +7,7 @@ from include.etl.extraction.sql_extractor import SQLEXtractor
 
 
 from airflow.utils.log.logging_mixin import LoggingMixin
+
 log = LoggingMixin().log
 
 default_args = {
@@ -14,16 +15,15 @@ default_args = {
     "retry_delay": 10,
 }
 
+
 @dag(
     dag_id="coretelecoms_dag",
     start_date=datetime(2025, 11, 19),
     catchup=False,
     schedule=None,
     # default_args=default_args,
-    tags=["coretelecoms"]
+    tags=["coretelecoms"],
 )
-
-
 def process_complaint_data():
 
     @task
@@ -60,7 +60,6 @@ def process_complaint_data():
         extractor = SQLEXtractor(context=context)
 
         return extractor.copy_web_complaints()
-    
 
     ingest_customer_data = ingest_customer_data_task()
     ingest_call_logs = ingest_call_logs_task()

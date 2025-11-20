@@ -1,6 +1,8 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
+
 load_dotenv()
+
 
 class Settings(BaseSettings):
     # db
@@ -9,11 +11,11 @@ class Settings(BaseSettings):
     DB_PASSWORD: str
     DB_CONN_STR: str
 
-    #google
+    # google
     GOOGLE_SHEET_ID: str
     GOOGLE_SERVICE_ACCOUNT_PATH: str
 
-    #aws
+    # aws
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str
     AWS_REGION: str
@@ -24,7 +26,7 @@ class Settings(BaseSettings):
     SRC_DB_CONN_STRING: str
     SRC_DB_SCHEMA: str
 
-    #bucket keys
+    # bucket keys
     BRONZE_BUCKET: str
     CUSTOMER_DATA_STAGING_DEST: str
     AGENT_DATA_STAGING_DEST: str
@@ -37,13 +39,9 @@ class Settings(BaseSettings):
     SRC_SM_COMPLAINTS_OBJ_KEY: str
     SRC_CALL_LOGS_OBJ_KEY: str
 
-
-
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
+
 
 config = Settings()
