@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     SRC_SM_COMPLAINTS_OBJ_KEY: str
     SRC_CALL_LOGS_OBJ_KEY: str
 
+    AGENT_DATA_OBJ_PREFIX: str
+    CUSTOMER_DATA_OBJ_PREFIX: str
+    CALL_LOGS_OBJ_PREFIX: str
+    SM_COMPLAINTS_OBJ_PREFIX: str
+    WEB_COMPLAINTS_OBJ_PREFIX: str
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )

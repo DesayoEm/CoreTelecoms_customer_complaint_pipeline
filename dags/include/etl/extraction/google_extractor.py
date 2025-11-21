@@ -9,10 +9,12 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 from include.config import config
+from include.notifications.failure_middleware import (
+    persist_ingestion_metadata_before_failure,
+)
 from include.exceptions.exceptions import (
     UnSupportedFileFormatError,
     EmptyDataFrameError,
-    DataIngestionError,
     GoogleCredentialsError,
     GoogleSheetReadError,
 )
@@ -47,7 +49,7 @@ class GoogleSheetsExtractor:
                 service_name="secretsmanager", region_name=config.AWS_REGION
             )
 
-            response = client.get_secret_value(SecretId="google_cloud_cred")
+            response = client.get_secret_value(SecretId="google_cloud_credv2")
             return json.loads(response["SecretString"])
 
         except Exception as e:
@@ -108,18 +110,21 @@ class GoogleSheetsExtractor:
 
         log.info(f"Metadata saved to s3://{dest_bucket}/{manifest_key}")
 
-        return {
-            "source_name": source_name,
-            "dest_bucket": dest_bucket,
-            "dest_key": dest_key,
-            "manifest_key": manifest_key,
+        metadata = {
+            "source_name": source_name if source_name else "Unknown",
+            "dest_bucket": dest_bucket if dest_bucket else "Unknown",
+            "dest_key": dest_key if dest_key else "Unknown",
+            "manifest_key": manifest_key if manifest_key else "Unknown",
             "row_count": row_count,
             "file_size_bytes": file_size_bytes,
             "format": "parquet",
         }
+        return metadata
 
     def copy_agents_data(self) -> Dict[str, any]:
         """Extracts agent data from Google Sheets and uploads to S3."""
+        metadata = {"execution_date": self.context.get("ds")}
+
         try:
             sheet_id = config.GOOGLE_SHEET_ID
             log.info(f"Reading agents data from Google Sheet: {sheet_id}")
@@ -132,28 +137,29 @@ class GoogleSheetsExtractor:
 
             current_execution_date = self.context.get("ds")
             dest_bucket = config.BRONZE_BUCKET
-            dest_key = f"{config.AGENT_DATA_STAGING_DEST}/agents_{current_execution_date}.parquet"
+            dest_key = f"{config.AGENT_DATA_STAGING_DEST}/{config.AGENT_DATA_OBJ_PREFIX}{current_execution_date}.parquet"
 
-            metadata = self.upload_dataframe_to_s3(
+            conversion_result = self.upload_dataframe_to_s3(
                 df=df,
                 source_name=f"google_sheets:{sheet_id}",
                 dest_bucket=dest_bucket,
                 dest_key=dest_key,
             )
+            metadata = {**metadata, **conversion_result}
 
             log.info(f"Successfully copied agents data: {metadata['row_count']} rows")
             return metadata
 
-        except gspread.exceptions.SpreadsheetNotFound:
+        except gspread.exceptions.SpreadsheetNotFound as e:
             log.error(f"Google Sheet not found: {config.GOOGLE_SHEET_ID}")
-            raise GoogleSheetReadError(
-                f"Google Sheet not found: {config.GOOGLE_SHEET_ID}"
-            )
+            persist_ingestion_metadata_before_failure(e, self.context, metadata)
 
         except gspread.exceptions.APIError as e:
             log.error(f"Google Sheets API error: {str(e)}")
-            raise GoogleSheetReadError(f"Google Sheets API error: {str(e)}") from e
+            persist_ingestion_metadata_before_failure(e, self.context, metadata)
 
         except Exception as e:
             log.error(f"Error ingesting agents data: {str(e)}")
+            persist_ingestion_metadata_before_failure(e, self.context, metadata)
+
             raise GoogleSheetReadError(f"Failed to copy agents data: {str(e)}") from e
