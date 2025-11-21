@@ -18,10 +18,10 @@ class Cleaner:
     @staticmethod
     def standardize_column_name(col: str) -> str:
         MANUAL_CORRECTIONS = {
-            'custome_r_i_d': 'customer_id',
-            'complaint_catego_ry': 'complaint_category',
-            'webformgenerationdate': 'web_form_generation_date',
-            'resolutionstatus': 'resolution_status'
+            "custome_r_i_d": "customer_id",
+            "complaint_catego_ry": "complaint_category",
+            "webformgenerationdate": "web_form_generation_date",
+            "resolutionstatus": "resolution_status",
         }
         if col in MANUAL_CORRECTIONS:
             col = MANUAL_CORRECTIONS.get(col)
@@ -33,22 +33,33 @@ class Cleaner:
 
         return col
 
-
     @staticmethod
     def standardize_name(name: str) -> str:
         return name.strip().title()
 
-    def standardize_state(self, state: str) -> str | None:
+    def validate_state(self, state: str) -> str | None:
         if state.lower() not in STATES:
             return None
 
         return state.title()
 
-    def standardize_experience(self, experience: str) -> str | None:
+    def validate_experience_level(self, experience: str) -> str | None:
         if experience.lower() not in EXPERIENCE_LEVELS:
             return None
 
         return experience.title()
+
+    def validate_complaint_category(self, category: str) -> str | None:
+        if category.lower() not in COMPLAINT_CATEGORIES:
+            return None
+
+        return category.title()
+
+    def validate_resolution_status(self, status: str) -> str | None:
+        if status.lower() not in RESOLUTION_STATUS:
+            return None
+
+        return status.title()
 
     def validate_gender(self, gender: str) -> str | None:
         if gender.lower() not in GENDER:

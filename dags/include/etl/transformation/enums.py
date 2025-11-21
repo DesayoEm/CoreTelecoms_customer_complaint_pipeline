@@ -146,7 +146,7 @@ COMPLAINT_CATEGORIES = {
     "payments",
 }
 
-RESOLUTION_STATUS = {"resolved", "backlog", "in-progress"}
+RESOLUTION_STATUS = {"resolved", "backlog", "in-progress", "blocked"}
 
 GENDER = {"m", "f"}
 
