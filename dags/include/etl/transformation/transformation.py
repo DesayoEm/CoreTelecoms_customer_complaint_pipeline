@@ -144,3 +144,33 @@ class Transformer:
         ]
 
         return df_complaints
+
+    def clean_call_logs(self, call_logs: str) -> pd.DataFrame:
+        df_logs = pd.read_parquet(call_logs)
+
+        clean_col_names = []
+        for col in df_logs.columns:
+            clean_col_name = self.cleaner.standardize_column_name(col)
+            clean_col_names.append(clean_col_name)
+        df_logs.columns = clean_col_names
+
+        if df_logs.duplicated().sum() > 0:
+            df_logs.drop_duplicates(inplace=True)
+
+        df_logs = df_logs.drop(columns=["unnamed_0"])
+        df_logs["call_log_key"] = df_logs.apply(
+            lambda row: self.generate_key(row["call_id"], row["resolution_status"]),
+            axis=1,
+        )
+        df_logs["complaint_category"] = df_logs["complaint_category"].apply(
+            self.cleaner.validate_complaint_category
+        )
+        df_logs["resolution_status"] = df_logs["resolution_status"].apply(
+            self.cleaner.validate_resolution_status
+        )
+
+        df_logs = df_logs[
+            ["call_log_key"] + [col for col in df_logs.columns if col != "call_log_key"]
+        ]
+
+        return df_logs
