@@ -11,6 +11,14 @@ gspread===6.2.1
 SQLAlchemy==1.4.54
 black==25.11.0
 flake8==7.3.0
+pytest==9.0.1
+pytest==mock-3.15.1
+pytest-cov==7.0.0
+faker==38.2.0
+freezegun==1.5.5
+
+
+
 
 
 
