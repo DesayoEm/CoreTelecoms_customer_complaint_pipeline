@@ -1,4 +1,4 @@
-STATES = {
+STATE_CODES = {
     # States
     "AL": "Alabama",
     "AK": "Alaska",
@@ -70,6 +70,74 @@ STATES = {
     "PW": "Palau",
 }
 
+STATES = {
+    "alabama",
+    "alaska",
+    "arizona",
+    "arkansas",
+    "california",
+    "colorado",
+    "connecticut",
+    "delaware",
+    "florida",
+    "georgia",
+    "hawaii",
+    "idaho",
+    "illinois",
+    "indiana",
+    "iowa",
+    "kansas",
+    "kentucky",
+    "louisiana",
+    "maine",
+    "maryland",
+    "massachusetts",
+    "michigan",
+    "minnesota",
+    "mississippi",
+    "missouri",
+    "montana",
+    "nebraska",
+    "nevada",
+    "new hampshire",
+    "new jersey",
+    "new mexico",
+    "new york",
+    "north carolina",
+    "north dakota",
+    "ohio",
+    "oklahoma",
+    "oregon",
+    "pennsylvania",
+    "rhode island",
+    "south carolina",
+    "south dakota",
+    "tennessee",
+    "texas",
+    "utah",
+    "vermont",
+    "virginia",
+    "washington",
+    "west virginia",
+    "wisconsin",
+    "wyoming",
+    "district of columbia",
+    "puerto rico",
+    "virgin islands",
+    "guam",
+    "american samoa",
+    "northern mariana islands",
+    "armed forces pacific",
+    "armed forces pacific",
+    "armed forces pacific",
+    "armed forces americas",
+    "armed forces europe",
+    "armed forces pacific",
+    "federated states of micronesia",
+    "marshall islands",
+    "palau",
+}
+
 
 COMPLAINT_CATEGORIES = {
     "technician support",
@@ -81,3 +149,6 @@ COMPLAINT_CATEGORIES = {
 RESOLUTION_STATUS = {"resolved", "backlog", "in-progress"}
 
 GENDER = {"m", "f"}
+
+
+EXPERIENCE_LEVELS = {"intern", "junior", "mid-level", "senior"}
