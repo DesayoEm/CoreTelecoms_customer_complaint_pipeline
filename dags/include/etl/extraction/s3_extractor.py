@@ -197,7 +197,7 @@ class S3Extractor:
         """Copies social media complaints from source S3 to destination S3."""
         return self.copy_data(
             src_key="social_medias/media_complaint_day_2025-11-20.json",  # deterministic key to be configured
-            dest_prefix=config.CALL_LOGS_OBJ_PREFIX,
+            dest_prefix=config.SM_COMPLAINTS_STAGING_DEST,
             obj_prefix=config.SM_COMPLAINTS_OBJ_PREFIX,
             obj_type="social media complaints",
         )
