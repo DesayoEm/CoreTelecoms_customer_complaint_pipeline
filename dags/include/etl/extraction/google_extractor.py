@@ -9,12 +9,14 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 from include.config import config
-from include.notifications.middleware import persist_ingestion_metadata_before_failure, persist_metadata_before_exit
+from include.notifications.failure_middleware import (
+    persist_ingestion_metadata_before_failure,
+)
 from include.exceptions.exceptions import (
     UnSupportedFileFormatError,
     EmptyDataFrameError,
     GoogleCredentialsError,
-    GoogleSheetReadError
+    GoogleSheetReadError,
 )
 from airflow.utils.log.logging_mixin import LoggingMixin
 
@@ -47,7 +49,7 @@ class GoogleSheetsExtractor:
                 service_name="secretsmanager", region_name=config.AWS_REGION
             )
 
-            response = client.get_secret_value(SecretId="google_cloud_cred")
+            response = client.get_secret_value(SecretId="google_cloud_credv2")
             return json.loads(response["SecretString"])
 
         except Exception as e:
@@ -108,7 +110,7 @@ class GoogleSheetsExtractor:
 
         log.info(f"Metadata saved to s3://{dest_bucket}/{manifest_key}")
 
-        metadata =  {
+        metadata = {
             "source_name": source_name if source_name else "Unknown",
             "dest_bucket": dest_bucket if dest_bucket else "Unknown",
             "dest_key": dest_key if dest_key else "Unknown",
@@ -121,9 +123,7 @@ class GoogleSheetsExtractor:
 
     def copy_agents_data(self) -> Dict[str, any]:
         """Extracts agent data from Google Sheets and uploads to S3."""
-        metadata = {
-            "execution_date": self.context.get("ds")
-        }
+        metadata = {"execution_date": self.context.get("ds")}
 
         try:
             sheet_id = config.GOOGLE_SHEET_ID
@@ -137,7 +137,7 @@ class GoogleSheetsExtractor:
 
             current_execution_date = self.context.get("ds")
             dest_bucket = config.BRONZE_BUCKET
-            dest_key = f"{config.AGENT_DATA_STAGING_DEST}/agents_{current_execution_date}.parquet"
+            dest_key = f"{config.AGENT_DATA_STAGING_DEST}/{config.AGENT_DATA_OBJ_PREFIX}{current_execution_date}.parquet"
 
             conversion_result = self.upload_dataframe_to_s3(
                 df=df,

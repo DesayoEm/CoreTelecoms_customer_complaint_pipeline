@@ -4,6 +4,7 @@ from airflow.sdk.definitions.context import get_current_context
 from include.etl.extraction.s3_extractor import S3Extractor
 from include.etl.extraction.google_extractor import GoogleSheetsExtractor
 from include.etl.extraction.sql_extractor import SQLEXtractor
+from include.notifications.success_notification import success_notification
 
 
 from airflow.utils.log.logging_mixin import LoggingMixin
@@ -11,8 +12,9 @@ from airflow.utils.log.logging_mixin import LoggingMixin
 log = LoggingMixin().log
 
 default_args = {
-    "retries": 2,
-    "retry_delay": 10,
+    # "retries": 2,
+    # "retry_delay": 10,
+    "on_success_callback": success_notification,
 }
 
 
@@ -21,7 +23,7 @@ default_args = {
     start_date=datetime(2025, 11, 19),
     catchup=False,
     schedule=None,
-    # default_args=default_args,
+    default_args=default_args,
     tags=["coretelecoms"],
 )
 def process_complaint_data():

@@ -7,11 +7,12 @@ from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
 
 from include.config import config
-from include.notifications.middleware import persist_ingestion_metadata_before_failure, persist_metadata_before_exit
+from include.notifications.failure_middleware import (
+    persist_ingestion_metadata_before_failure,
+)
 from include.exceptions.exceptions import (
     UnSupportedFileFormatError,
     EmptyDataFrameError,
-    DataIngestionError,
 )
 from airflow.utils.log.logging_mixin import LoggingMixin
 
@@ -25,6 +26,42 @@ class S3Extractor:
         self.context = context
         self.s3_src_hook = s3_src_hook or S3Hook(aws_conn_id="aws_airflow_src_user")
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
+
+    def copy_data(
+        self, src_key: str, dest_prefix: str, obj_prefix: str, obj_type: str
+    ) -> Dict[str, any]:
+        """Copies data from source S3 to destination S3."""
+
+        metadata = {"execution_date": self.context.get("ds")}
+        src_bucket = config.SRC_BUCKET_NAME
+
+        try:
+            log.info(f"Reading from s3://{src_bucket}/{src_key}")
+
+            file_content = self.s3_src_hook.read_key(
+                key=src_key, bucket_name=src_bucket
+            )
+
+            current_execution_date = self.context.get("ds")
+            dest_bucket = config.BRONZE_BUCKET
+            full_dest_key = (
+                f"{dest_prefix}/{obj_prefix}-{current_execution_date}.parquet"
+            )
+
+            conversion_result = self.convert_and_upload_to_s3(
+                data=file_content,
+                src_key=src_key,
+                dest_bucket=dest_bucket,
+                dest_key=full_dest_key,
+            )
+
+            metadata = {**metadata, **conversion_result}
+            log.info(f"Successfully copied {obj_type}: {metadata['row_count']} rows")
+            return metadata
+
+        except Exception as e:
+            log.error(f"Failed to copy {obj_type}: {str(e)}")
+            persist_ingestion_metadata_before_failure(e, self.context, metadata)
 
     def convert_and_upload_to_s3(
         self, data: str | bytes, src_key: str, dest_bucket: str, dest_key: str
@@ -129,7 +166,9 @@ class S3Extractor:
 
         metadata = {
             "src_key": src_key if src_key else "Unknown",
-            "destination": f"{dest_bucket}/{dest_key}" if dest_bucket and dest_key else "Unknown",
+            "destination": (
+                f"{dest_bucket}/{dest_key}" if dest_bucket and dest_key else "Unknown"
+            ),
             "row_count": row_count,
             "file_size_bytes": file_size_bytes,
             "format": "parquet",
@@ -138,117 +177,27 @@ class S3Extractor:
 
     def copy_customers_data(self) -> Dict[str, any]:
         """Copies customer data from source S3 to destination S3."""
-        metadata = {
-            "execution_date": self.context.get("ds")
-        }
-        try:
-
-            src_bucket = config.SRC_BUCKET_NAME
-            src_key = config.SRC_CUSTOMERS_OBJ_KEY
-
-            log.info(f"Reading from s3://{src_bucket}/{src_key}")
-
-            file_content = self.s3_src_hook.read_key(
-                key=src_key, bucket_name=src_bucket
-            )
-
-            current_execution_date = self.context.get("ds")
-            dest_bucket = config.BRONZE_BUCKET
-            dest_key = f"{config.CUSTOMER_DATA_STAGING_DEST}/customers_dataset-{current_execution_date}.parquet"
-
-            conversion_result = self.convert_and_upload_to_s3(
-                data=file_content,
-                src_key=src_key,
-                dest_bucket=dest_bucket,
-                dest_key=dest_key,
-            )
-
-            metadata = {**conversion_result, **conversion_result}
-            log.info(
-                f"Successfully copied customers data: {metadata['row_count']} rows"
-            )
-            return metadata
-
-        except Exception as e:
-            log.error(
-                f"Failed to copy customers data: {str(e)}"
-            )
-            persist_ingestion_metadata_before_failure(e, self.context, metadata)
+        return self.copy_data(
+            src_key=config.SRC_CUSTOMERS_OBJ_KEY,
+            dest_prefix=config.CUSTOMER_DATA_STAGING_DEST,
+            obj_prefix=config.CUSTOMER_DATA_OBJ_PREFIX,
+            obj_type="customers data",
+        )
 
     def copy_call_log_data(self) -> Dict[str, any]:
         """Copies call logs from source S3 to destination S3."""
-        metadata = {
-            "execution_date": self.context.get("ds")
-        }
-
-        try:
-            src_bucket = config.SRC_BUCKET_NAME
-            src_key = "call logs/call_logs_day_2025-11-20.csv"
-
-            log.info(f"Reading from s3://{src_bucket}/{src_key}")
-
-            file_content = self.s3_src_hook.read_key(
-                key=src_key, bucket_name=src_bucket
-            )
-
-            current_execution_date = self.context.get("ds")
-            dest_bucket = config.BRONZE_BUCKET
-            dest_key = f"{config.CALL_LOGS_STAGING_DEST}/call_logs-{current_execution_date}.parquet"
-
-            conversion_result = self.convert_and_upload_to_s3(
-                data=file_content,
-                src_key=src_key,
-                dest_bucket=dest_bucket,
-                dest_key=dest_key,
-            )
-
-            metadata = {**metadata, **conversion_result}
-            log.info(
-                f"Successfully copied call logs for {current_execution_date}: {metadata['row_count']} rows"
-            )
-            return metadata
-
-        except Exception as e:
-            log.error(
-                f"Failed to copy call logs {str(e)}"
-            )
-            persist_ingestion_metadata_before_failure(e, self.context, metadata)
+        return self.copy_data(
+            src_key="call logs/call_logs_day_2025-11-20.csv",
+            dest_prefix=config.CALL_LOGS_STAGING_DEST,
+            obj_prefix=config.CALL_LOGS_OBJ_PREFIX,
+            obj_type="call logs",
+        )
 
     def copy_social_media_complaint_data(self) -> Dict[str, any]:
         """Copies social media complaints from source S3 to destination S3."""
-        metadata = {
-            "execution_date": self.context.get("ds")
-        }
-
-        try:
-            src_bucket = config.SRC_BUCKET_NAME
-            src_key = "social_medias/media_complaint_day_2025-11-20.json" #deterministic key to be configured
-
-            log.info(f"Reading from s3://{src_bucket}/{src_key}")
-
-            file_content = self.s3_src_hook.read_key(
-                key=src_key, bucket_name=src_bucket
-            )
-
-            current_execution_date = self.context.get("ds")
-            dest_bucket = config.BRONZE_BUCKET
-            dest_key = f"{config.SM_COMPLAINTS_STAGING_DEST}/sm-complaints-{current_execution_date}.parquet"
-
-            conversion_result = self.convert_and_upload_to_s3(
-                data=file_content,
-                src_key=src_key,
-                dest_bucket=dest_bucket,
-                dest_key=dest_key,
-            )
-            metadata = {**metadata, **conversion_result}
-
-            log.info(
-                f"Successfully copied social media complaints for {current_execution_date}: {metadata['row_count']} rows"
-            )
-            return metadata
-
-        except Exception as e:
-            log.error(
-                f"Failed to copy social media complaints data: {str(e)}"
-            )
-            persist_ingestion_metadata_before_failure(e, self.context, metadata)
+        return self.copy_data(
+            src_key="social_medias/media_complaint_day_2025-11-20.json",  # deterministic key to be configured
+            dest_prefix=config.CALL_LOGS_OBJ_PREFIX,
+            obj_prefix=config.SM_COMPLAINTS_OBJ_PREFIX,
+            obj_type="social media complaints",
+        )

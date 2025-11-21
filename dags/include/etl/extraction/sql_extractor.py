@@ -8,11 +8,10 @@ from datetime import datetime
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
 from include.config import config
-from include.notifications.middleware import persist_ingestion_metadata_before_failure, persist_metadata_before_exit
-from include.exceptions.exceptions import (
-    EmptyDataFrameError,
-    SQLReadError,
+from include.notifications.failure_middleware import (
+    persist_ingestion_metadata_before_failure,
 )
+from include.exceptions.exceptions import EmptyDataFrameError, SQLReadError
 from airflow.utils.log.logging_mixin import LoggingMixin
 
 
@@ -49,7 +48,6 @@ class SQLEXtractor:
             f"({row_count} rows, {file_size_bytes / 1024 / 1024:.2f} MB)"
         )
 
-
         manifest = {
             "data_file": dest_key,
             "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
@@ -67,7 +65,6 @@ class SQLEXtractor:
             },
         }
 
-
         manifest_key = dest_key.replace(".parquet", "_manifest.json")
         self.s3_dest_hook.load_string(
             string_data=json.dumps(manifest, indent=2),
@@ -83,16 +80,14 @@ class SQLEXtractor:
             "dest_bucket": dest_bucket if dest_bucket else "Unknown",
             "dest_key": dest_key if dest_key else "Unknown",
             "manifest_key": manifest_key if manifest_key else "Unknown",
-            "row_count": row_count ,
+            "row_count": row_count,
             "file_size_bytes": file_size_bytes,
         }
 
         return metadata
 
     def copy_web_complaints(self):
-        metadata = {
-            "execution_date": self.context.get("ds")
-        }
+        metadata = {"execution_date": self.context.get("ds")}
         try:
             engine = create_engine(f"{config.SRC_DB_CONN_STRING}")
 
@@ -105,18 +100,17 @@ class SQLEXtractor:
             log.info(f"Extracted {len(df)} web complaints from table {table_name}")
 
             current_execution_date = self.context.get("ds")
-            dest_key = f"{config.WEB_COMPLAINTS_STAGING_DEST}/web_complaints_{current_execution_date}.parquet"
+            dest_key = f"{config.WEB_COMPLAINTS_STAGING_DEST}/{config.WEB_COMPLAINTS_OBJ_PREFIX}{current_execution_date}.parquet"
 
-            conversion_result =  self.upload_dataframe_to_s3(
+            conversion_result = self.upload_dataframe_to_s3(
                 df=df,
                 table_name=table_name,
                 dest_bucket=config.BRONZE_BUCKET,
                 dest_key=dest_key,
             )
             metadata = {**metadata, **conversion_result}
+            return metadata
 
         except Exception as e:
             log.error(f"Error ingesting web complaints: {str(e)}")
             persist_ingestion_metadata_before_failure(e, self.context, metadata)
-
-
