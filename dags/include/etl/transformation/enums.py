@@ -1,4 +1,5 @@
 STATES = {
+    # States
     "AL": "Alabama",
     "AK": "Alaska",
     "AZ": "Arizona",
@@ -49,6 +50,24 @@ STATES = {
     "WV": "West Virginia",
     "WI": "Wisconsin",
     "WY": "Wyoming",
+    # U.S. Territories
+    "DC": "District of Columbia",
+    "PR": "Puerto Rico",
+    "VI": "Virgin Islands",
+    "GU": "Guam",
+    "AS": "American Samoa",
+    "MP": "Northern Mariana Islands",
+    # Military Mail Codes
+    "APO": "Armed Forces Pacific",
+    "FPO": "Armed Forces Pacific",
+    "DPO": "Armed Forces Pacific",
+    "AA": "Armed Forces Americas",
+    "AE": "Armed Forces Europe",
+    "AP": "Armed Forces Pacific",
+    # Pacific territories
+    "FM": "Federated States of Micronesia",
+    "MH": "Marshall Islands",
+    "PW": "Palau",
 }
 
 
@@ -60,3 +79,5 @@ COMPLAINT_CATEGORIES = {
 }
 
 RESOLUTION_STATUS = {"resolved", "backlog", "in-progress"}
+
+GENDER = {"m", "f"}

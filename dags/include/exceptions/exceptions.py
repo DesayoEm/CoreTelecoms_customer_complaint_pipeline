@@ -44,3 +44,12 @@ class SQLReadError(DataIngestionError):
         message = f"{details}"
         super().__init__(message)
         self.log = message
+
+
+class NullAfterCleanError(DataQualityWarning):
+    """Raised when an attempt to clean a value fails and returns None"""
+
+    def __init__(self, value: str, obj_type: str, field: str):
+        message = f"{field} on {obj_type}failed cleaning {value}"
+        super().__init__(message)
+        self.log = message

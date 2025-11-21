@@ -1,20 +1,17 @@
 import pandas as pd
-import re
-
-# import json
-# from typing import Dict, List, Any, Hashable
-# from datetime import datetime
+import pyarrow.parquet as pq
 import hashlib
-from include.etl.transformation.states_config import (
+from include.etl.transformation.enums import (
     STATES,
     RESOLUTION_STATUS,
     COMPLAINT_CATEGORIES,
 )
+from include.etl.transformation.data_cleaning import Cleaner
 
 
 class Transformer:
     def __init__(self):
-        pass
+        self.cleaner = Cleaner()
 
     @staticmethod
     def generate_key(*args) -> str:
@@ -22,65 +19,39 @@ class Transformer:
         combined = "|".join(str(arg) for arg in args if arg is not None)
         return hashlib.md5(combined.encode()).hexdigest()[:16]
 
-    @staticmethod
-    def standardize_column_name(col: str) -> str:
-        col = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", col)
-        col = col.lower()
-        col = re.sub(r"[^a-z0-9]+", "_", col)
-        col = col.strip("_")
+    def clean_customers(self, customer_data: str) -> pd.DataFrame:
+        df_customers = pd.read_parquet(customer_data)
 
-        return col
+        clean_col_names = []
+        for col in df_customers.columns:
+            clean_col_name = self.cleaner.standardize_column_name(col)
+            clean_col_names.append(clean_col_name)
+        df_customers.columns = clean_col_names
 
-    @staticmethod
-    def standardize_name(name: str) -> str:
-        return name.strip().title()
+        if df_customers.duplicated().sum() > 0:
+            df_customers.drop_duplicates(inplace=True)
 
-    @staticmethod
-    def clean_email(email: str) -> str | None:
-        if pd.isna(email):
-            return None
+        df_customers["name"] = df_customers["name"].apply(self.cleaner.standardize_name)
+        df_customers["gender"] = df_customers["gender"].apply(
+            self.cleaner.validate_gender
+        )
+        df_customers["email"] = df_customers["email"].apply(self.cleaner.clean_email)
+        df_customers["zip_code"] = df_customers["address"].apply(
+            self.cleaner.extract_zip_code
+        )
+        df_customers["state_code"] = df_customers["address"].apply(
+            self.cleaner.extract_state_code
+        )
+        df_customers["state"] = df_customers["state_code"].apply(
+            self.cleaner.extract_state
+        )
 
-        email = email.lower().strip()
+        df_customers["customer_key"] = df_customers["customer_id"].apply(
+            self.generate_key
+        )
+        df_customers = df_customers[
+            ["customer_key"]
+            + [col for col in df_customers.columns if col != "customer_key"]
+        ]
 
-        email = re.sub(r"@\d+@", "@", email)
-
-        email = re.sub(r"[^a-z0-9._-]+@", "@", email)
-
-        email = email.replace(".om", ".com")
-        email = email.replace("gmial", "gmail")
-
-        if "@" in email and "." in email.split("@")[-1]:
-            return email
-        return None  # flag
-
-    @staticmethod
-    def extract_state_code(address: str) -> str | None:
-        if pd.isna(address):
-            return None
-
-        parts = [p.strip() for p in address.split(" ")]
-        if len(parts) >= 2:
-            state_code = parts[-2]
-
-            if state_code in STATES and len(state_code) == 2:
-                return state_code
-            else:
-                pass  # log data quality
-
-        return None
-
-    @staticmethod
-    def extract_zip_code(address: str) -> str | None:
-        if pd.isna(address):
-            return None
-
-        parts = [p.strip() for p in address.split(" ")]
-        if len(parts) >= 2:
-            zip_code = parts[-1]
-
-            if len(zip_code) == 5:
-                return zip_code
-            else:
-                pass  # log data quality
-
-        return None
+        return df_customers
