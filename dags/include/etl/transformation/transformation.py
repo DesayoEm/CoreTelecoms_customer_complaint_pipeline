@@ -70,7 +70,7 @@ class Transformer:
         if df_agents.duplicated().sum() > 0:
             df_agents.drop_duplicates(inplace=True)
 
-        df_agents["agent_key"] = df_agents["id"].apply(self.cleaner.generate_key)
+        df_agents["agent_key"] = df_agents["id"].apply(self.generate_key)
         df_agents["name"] = df_agents["name"].apply(self.cleaner.standardize_name)
         df_agents["experience"] = df_agents["experience"].apply(
             self.cleaner.validate_experience_level
@@ -96,9 +96,7 @@ class Transformer:
 
         df_complaints.drop(columns=["column1"], inplace=True)
         df_complaints["web_complaint_key"] = df_complaints.apply(
-            lambda row: self.cleaner.generate_key(
-                row["request_id"], row["resolution_status"]
-            ),
+            lambda row: self.generate_key(row["request_id"], row["resolution_status"]),
             axis=1,
         )
         df_complaints["complaint_category"] = df_complaints["complaint_category"].apply(
@@ -111,6 +109,38 @@ class Transformer:
         df_complaints = df_complaints[
             ["web_complaint_key"]
             + [col for col in df_complaints.columns if col != "web_complaint_key"]
+        ]
+
+        return df_complaints
+
+    def clean_sm_complaints(self, sm_complaints_data: str) -> pd.DataFrame:
+        df_complaints = pd.read_parquet(sm_complaints_data)
+
+        clean_col_names = []
+        for col in df_complaints.columns:
+            clean_col_name = self.cleaner.standardize_column_name(col)
+            clean_col_names.append(clean_col_name)
+        df_complaints.columns = clean_col_names
+
+        if df_complaints.duplicated().sum() > 0:
+            df_complaints.drop_duplicates(inplace=True)
+
+        df_complaints["sm_complaint_key"] = df_complaints.apply(
+            lambda row: self.generate_key(
+                row["complaint_id"], row["resolution_status"]
+            ),
+            axis=1,
+        )
+        df_complaints["complaint_category"] = df_complaints["complaint_category"].apply(
+            self.cleaner.validate_complaint_category
+        )
+        df_complaints["resolution_status"] = df_complaints["resolution_status"].apply(
+            self.cleaner.validate_resolution_status
+        )
+
+        df_complaints = df_complaints[
+            ["sm_complaint_key"]
+            + [col for col in df_complaints.columns if col != "sm_complaint_key"]
         ]
 
         return df_complaints

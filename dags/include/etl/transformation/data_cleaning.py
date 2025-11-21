@@ -7,6 +7,7 @@ from include.etl.transformation.enums import (
     COMPLAINT_CATEGORIES,
     GENDER,
     EXPERIENCE_LEVELS,
+    MEDIA_CHANNELS,
 )
 from include.exceptions.exceptions import NullAfterCleanError
 
@@ -22,6 +23,8 @@ class Cleaner:
             "complaint_catego_ry": "complaint_category",
             "webformgenerationdate": "web_form_generation_date",
             "resolutionstatus": "resolution_status",
+            "MediaComplaintGenerationDate": "media_complaint_generation_date",
+            "COMPLAINT_catego ry": "complaint_category",
         }
         if col in MANUAL_CORRECTIONS:
             col = MANUAL_CORRECTIONS.get(col)
@@ -60,6 +63,12 @@ class Cleaner:
             return None
 
         return status.title()
+
+    def validate_media_channel(self, channel: str) -> str | None:
+        if channel.lower() not in MEDIA_CHANNELS:
+            return None
+
+        return channel.upper()
 
     def validate_gender(self, gender: str) -> str | None:
         if gender.lower() not in GENDER:
