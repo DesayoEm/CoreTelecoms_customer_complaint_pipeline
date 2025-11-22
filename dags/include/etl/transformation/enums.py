@@ -150,6 +150,6 @@ RESOLUTION_STATUS = {"resolved", "backlog", "in-progress", "blocked"}
 
 GENDER = {"m", "f"}
 
-MEDIA_CHANNELS = {"instagram" "twitter" "facebook" "linkedin"}
+MEDIA_CHANNELS = {"instagram", "twitter", "facebook", "linkedin"}
 
 EXPERIENCE_LEVELS = {"intern", "junior", "mid-level", "senior"}
