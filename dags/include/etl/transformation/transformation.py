@@ -7,6 +7,7 @@ import hashlib
 
 from include.config import config
 from include.etl.transformation.data_cleaning import Cleaner
+from include.etl.transformation.data_quality import DataQualityChecker
 from include.exceptions.exceptions import DataLoadError
 
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
@@ -19,12 +20,18 @@ class Transformer:
     def __init__(self, context: Dict, s3_dest_hook: S3Hook = None):
         self.context = context
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
-
         self.cleaner = Cleaner()
+        self.dq_checker = DataQualityChecker(self.cleaner)
+
+    @staticmethod
+    def apply_transformation(series, func, parallel_threshold=100000):
+        if len(series) > parallel_threshold:
+            return series.parallel_apply(func)
+        return series.apply(func)
 
     @staticmethod
     def generate_key(*args) -> str:
-        """Generate a deterministic surrogate key from input values."""
+        """Generates a deterministic surrogate key from input values."""
         combined = "|".join(str(arg) for arg in args if arg is not None)
         return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
@@ -33,18 +40,18 @@ class Transformer:
         df.columns = [self.cleaner.standardize_column_name(col) for col in df.columns]
         return df
 
-    def upload_problematic_data_to_s3(
-        self, data: Dict, source: str, dest_bucket: str, dest_key: str
+    def upload_problematic_records_to_s3(
+        self, data: pd.DataFrame, source: str, dest_bucket: str, dest_key: str
     ) -> str:
-        """Converts Dict into Parquet and uploads to S3."""
+        """converts Dict into Parquet and uploads to S3."""
         buffer = io.BytesIO()
-        df = pd.DataFrame(data)
-        row_count = len(df)
+        row_count = len(data)
 
-        df.to_parquet(buffer, engine="pyarrow", index=False, compression="snappy")
+        data.to_parquet(buffer, engine="pyarrow", index=False, compression="snappy")
         file_size_bytes = buffer.tell()
         buffer.seek(0)
 
+        dest_key = f"{dest_key}.parquet"
         self.s3_dest_hook.load_file_obj(
             file_obj=buffer, key=dest_key, bucket_name=dest_bucket, replace=True
         )
@@ -69,7 +76,7 @@ class Transformer:
             },
         }
 
-        manifest_key = dest_key.replace(".parquet", "_manifest.json")
+        manifest_key = dest_key.replace(".parquet", "-manifest.json")
         self.s3_dest_hook.load_string(
             string_data=json.dumps(manifest, indent=2),
             key=manifest_key,
@@ -97,7 +104,7 @@ class Transformer:
         """Move key column to first position"""
         return df[[key_col] + [col for col in df.columns if col != key_col]]
 
-    def clean_and_load_customers(self, customer_data: str) -> Dict[str, Any]:
+    def transform_and_load_customers(self, customer_data: str) -> Dict[str, Any]:
         try:
             df_customers = pd.read_parquet(customer_data)
         except Exception as e:
@@ -106,32 +113,41 @@ class Transformer:
         df_customers, duplicate_count = self.remove_duplicates(df_customers)
         df_customers = self.standardize_columns(df_customers)
 
-        df_customers["customer_key"] = df_customers["customer_id"].apply(
-            self.generate_key
+        df_customers["customer_key"] = self.apply_transformation(
+            df_customers["customer_id"], self.generate_key
         )
         df_customers = self.add_key_as_first_column(df_customers, "customer_key")
 
-        df_customers["name"] = df_customers["name"].apply(self.cleaner.standardize_name)
-        df_customers["gender"] = df_customers["gender"].apply(
-            self.cleaner.validate_gender
-        )
-        df_customers["email"] = df_customers["email"].apply(self.cleaner.clean_email)
-        df_customers["zip_code"] = df_customers["address"].apply(
-            self.cleaner.extract_zip_code
-        )
-        df_customers["state_code"] = df_customers["address"].apply(
-            self.cleaner.extract_state_code
-        )
-        df_customers["state"] = df_customers["state_code"].apply(
-            self.cleaner.extract_state
+        # customer_key needs to be in the DataFrame, so customers with bad values are identified
+        # downstream after bad values are cleaned/nulled
+
+        problematic_records = self.dq_checker.identify_problematic_customers(
+            df_customers
         )
 
-        problematic_data = self.cleaner.problematic_data
+        df_customers["name"] = self.apply_transformation(
+            df_customers["name"], self.cleaner.standardize_name
+        )
+        df_customers["gender"] = self.apply_transformation(
+            df_customers["gender"], self.cleaner.validate_gender
+        )
+        df_customers["email"] = self.apply_transformation(
+            df_customers["email"], self.cleaner.clean_email
+        )
+        df_customers["zip_code"] = self.apply_transformation(
+            df_customers["address"], self.cleaner.extract_zip_code
+        )
+        df_customers["state_code"] = self.apply_transformation(
+            df_customers["address"], self.cleaner.extract_state_code
+        )
+        df_customers["state"] = self.apply_transformation(
+            df_customers["state_code"], self.cleaner.generate_state
+        )
 
-        location = None
-        if len(problematic_data) > 0:
-            location = self.upload_problematic_data_to_s3(
-                data=problematic_data,
+        problematic_record_location = None
+        if not problematic_records.empty:
+            problematic_record_location = self.upload_problematic_records_to_s3(
+                data=problematic_records,
                 source=customer_data,
                 dest_bucket=config.BRONZE_BUCKET,
                 dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/customers-problematic-{self.context['ds']}",
@@ -140,10 +156,11 @@ class Transformer:
         metadata = {
             "rows_processed": len(df_customers),
             "duplicates_removed": duplicate_count,
-            "null_emails": df_customers["email"].isna().sum(),
-            "problematic_data_points": problematic_data,
+            "problematic_rows_excluded": len(problematic_records),
             "problematic_data_location": (
-                location if location else "No problematic data points"
+                problematic_record_location
+                if problematic_record_location
+                else "No problematic data points"
             ),
         }
         # load df here. too large to return
@@ -151,121 +168,216 @@ class Transformer:
 
         return metadata
 
-    def clean_agents(self, agent_data: str) -> pd.DataFrame:
-        df_agents = pd.read_parquet(agent_data)
+    def transform_and_load_agents(self, agent_data: str) -> Dict[str, Any]:
+        """Transforms and loads agent data. Does not require parallelization as
+        agent data is predictably small and static"""
+        try:
+            df_agents = pd.read_parquet(agent_data)
+        except Exception as e:
+            raise DataLoadError(error=e, obj_type="agent data")
 
-        clean_col_names = []
-        for col in df_agents.columns:
-            clean_col_name = self.cleaner.standardize_column_name(col)
-            clean_col_names.append(clean_col_name)
-        df_agents.columns = clean_col_names
-
-        if df_agents.duplicated().sum() > 0:
-            df_agents.drop_duplicates(inplace=True)
+        df_agents, duplicate_count = self.remove_duplicates(df_agents)
+        df_agents = self.standardize_columns(df_agents)
 
         df_agents["agent_key"] = df_agents["id"].apply(self.generate_key)
+        df_agents = self.add_key_as_first_column(df_agents, "agent_key")
+
+        # problematic records are only read after generating key
+        problematic_records = self.dq_checker.identify_problematic_agents(df_agents)
+
         df_agents["name"] = df_agents["name"].apply(self.cleaner.standardize_name)
         df_agents["experience"] = df_agents["experience"].apply(
             self.cleaner.validate_experience_level
         )
         df_agents["state"] = df_agents["state"].apply(self.cleaner.validate_state)
 
-        df_agents = df_agents[
-            ["agent_key"] + [col for col in df_agents.columns if col != "agent_key"]
-        ]
-        return df_agents
+        problematic_record_location = None
+        if problematic_records:
+            problematic_record_location = self.upload_problematic_records_to_s3(
+                data=problematic_records,
+                source=agent_data,
+                dest_bucket=config.BRONZE_BUCKET,
+                dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/agents-problematic-{self.context['ds']}",
+            )
 
-    def clean_web_complaints(self, web_complaints_data: str) -> pd.DataFrame:
-        df_complaints = pd.read_parquet(web_complaints_data)
+        metadata = {
+            "rows_processed": len(df_agents),
+            "duplicates_removed": duplicate_count,
+            "problematic_rows_excluded": len(problematic_records),
+            "problematic_data_location": (
+                problematic_record_location
+                if problematic_record_location
+                else "No problematic data points"
+            ),
+        }
+        # load df here. too large to return
+        # to be implemented later
 
-        clean_col_names = []
-        for col in df_complaints.columns:
-            clean_col_name = self.cleaner.standardize_column_name(col)
-            clean_col_names.append(clean_col_name)
-        df_complaints.columns = clean_col_names
+        return metadata
 
-        if df_complaints.duplicated().sum() > 0:
-            df_complaints.drop_duplicates(inplace=True)
+    def transform_and_load_web_complaints(
+        self, web_complaints_data: str
+    ) -> Dict[str, Any]:
+        try:
+            df_complaints = pd.read_parquet(web_complaints_data)
+        except Exception as e:
+            raise DataLoadError(error=e, obj_type="web complaint data")
 
-        df_complaints.drop(columns=["column1"], inplace=True)
+        df_complaints, duplicate_count = self.remove_duplicates(df_complaints)
+        df_complaints = self.standardize_columns(df_complaints)
+
         df_complaints["web_complaint_key"] = (
             df_complaints["request_id"].astype(str)
             + "|"
             + df_complaints["resolution_status"].astype(str)
         ).apply(lambda x: hashlib.md5(x.encode()).hexdigest()[:16])
 
-        df_complaints["complaint_category"] = df_complaints["complaint_category"].apply(
-            self.cleaner.validate_complaint_category
+        df_complaints = self.add_key_as_first_column(df_complaints, "web_complaint_key")
+
+        # problematic records are only read after generating key
+        problematic_records = self.dq_checker.identify_problematic_web_complaints(
+            df_complaints
         )
-        df_complaints["resolution_status"] = df_complaints["resolution_status"].apply(
-            self.cleaner.validate_resolution_status
+
+        df_complaints["complaint_category"] = self.apply_transformation(
+            df_complaints["complaint_category"],
+            self.cleaner.validate_complaint_category,
+        )
+        df_complaints["resolution_status"] = self.apply_transformation(
+            df_complaints["resolution_status"], self.cleaner.validate_resolution_status
         )
 
-        df_complaints = df_complaints[
-            ["web_complaint_key"]
-            + [col for col in df_complaints.columns if col != "web_complaint_key"]
-        ]
+        problematic_record_location = None
+        if not problematic_records.empty:
+            problematic_record_location = self.upload_problematic_records_to_s3(
+                data=problematic_records,
+                source=web_complaints_data,
+                dest_bucket=config.BRONZE_BUCKET,
+                dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/web-complaints-problematic-{self.context['ds']}",
+            )
 
-        return df_complaints
-
-    def clean_sm_complaints(self, sm_complaints_data: str) -> pd.DataFrame:
-        df_complaints = pd.read_parquet(sm_complaints_data)
-
-        clean_col_names = []
-        for col in df_complaints.columns:
-            clean_col_name = self.cleaner.standardize_column_name(col)
-            clean_col_names.append(clean_col_name)
-        df_complaints.columns = clean_col_names
-
-        if df_complaints.duplicated().sum() > 0:
-            df_complaints.drop_duplicates(inplace=True)
-
-        df_complaints["sm_complaint_key"] = df_complaints.apply(
-            lambda row: self.generate_key(
-                row["complaint_id"], row["resolution_status"]
+        metadata = {
+            "rows_processed": len(df_complaints),
+            "duplicates_removed": duplicate_count,
+            "problematic_rows_excluded": len(problematic_records),
+            "problematic_data_location": (
+                problematic_record_location
+                if problematic_record_location
+                else "No problematic data points"
             ),
-            axis=1,
-        )
-        df_complaints["complaint_category"] = df_complaints["complaint_category"].apply(
-            self.cleaner.validate_complaint_category
-        )
-        df_complaints["resolution_status"] = df_complaints["resolution_status"].apply(
-            self.cleaner.validate_resolution_status
-        )
+        }
+        # load df here. too large to return
+        # to be implemented later
 
-        df_complaints = df_complaints[
-            ["sm_complaint_key"]
-            + [col for col in df_complaints.columns if col != "sm_complaint_key"]
-        ]
+        return metadata
 
-        return df_complaints
+    def transform_and_load_sm_complaints(
+        self, sm_complaints_data: str
+    ) -> Dict[str, Any]:
+        try:
+            df_complaints = pd.read_parquet(sm_complaints_data)
+        except Exception as e:
+            raise DataLoadError(error=e, obj_type="Social media complaint data")
 
-    def clean_call_logs(self, call_logs: str) -> pd.DataFrame:
-        df_logs = pd.read_parquet(call_logs)
+        df_complaints, duplicate_count = self.remove_duplicates(df_complaints)
+        df_complaints = self.standardize_columns(df_complaints)
 
-        clean_col_names = []
-        for col in df_logs.columns:
-            clean_col_name = self.cleaner.standardize_column_name(col)
-            clean_col_names.append(clean_col_name)
-        df_logs.columns = clean_col_names
+        df_complaints["sm_complaint_key"] = (
+            df_complaints["request_id"].astype(str)
+            + "|"
+            + df_complaints["resolution_status"].astype(str)
+        ).apply(lambda x: hashlib.md5(x.encode()).hexdigest()[:16])
 
-        if df_logs.duplicated().sum() > 0:
-            df_logs.drop_duplicates(inplace=True)
+        df_complaints = self.add_key_as_first_column(df_complaints, "sm_complaint_key")
 
-        df_logs = df_logs.drop(columns=["unnamed_0"])
-        df_logs["call_log_key"] = df_logs.apply(
-            lambda row: self.generate_key(row["call_id"], row["resolution_status"]),
-            axis=1,
-        )
-        df_logs["complaint_category"] = df_logs["complaint_category"].apply(
-            self.cleaner.validate_complaint_category
-        )
-        df_logs["resolution_status"] = df_logs["resolution_status"].apply(
-            self.cleaner.validate_resolution_status
+        # problematic records are only read after generating key
+        problematic_records = self.dq_checker.identify_problematic_sm_complaints(
+            df_complaints
         )
 
-        df_logs = df_logs[
-            ["call_log_key"] + [col for col in df_logs.columns if col != "call_log_key"]
-        ]
+        df_complaints["complaint_category"] = self.apply_transformation(
+            df_complaints["complaint_category"],
+            self.cleaner.validate_complaint_category,
+        )
+        df_complaints["resolution_status"] = self.apply_transformation(
+            df_complaints["resolution_status"], self.cleaner.validate_resolution_status
+        )
+        df_complaints["media_channel"] = self.apply_transformation(
+            df_complaints["media_channel"], self.cleaner.validate_media_channel
+        )
 
-        return df_logs
+        problematic_record_location = None
+        if not problematic_records.empty:
+            problematic_record_location = self.upload_problematic_records_to_s3(
+                data=problematic_records,
+                source=sm_complaints_data,
+                dest_bucket=config.BRONZE_BUCKET,
+                dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/sm-complaints-problematic-{self.context['ds']}",
+            )
+
+        metadata = {
+            "rows_processed": len(df_complaints),
+            "duplicates_removed": duplicate_count,
+            "problematic_rows_excluded": len(problematic_records),
+            "problematic_data_location": (
+                problematic_record_location
+                if problematic_record_location
+                else "No problematic data points"
+            ),
+        }
+        # load df here. too large to return
+        # to be implemented later
+
+        return metadata
+
+    def transform_and_load_call_logs(self, call_logs: str) -> Dict[str, Any]:
+        try:
+            df_call_logs = pd.read_parquet(call_logs)
+        except Exception as e:
+            raise DataLoadError(error=e, obj_type="Call logs")
+
+        df_call_logs = df_call_logs.drop(columns=["unnamed_0"])
+        df_call_logs, duplicate_count = self.remove_duplicates(df_call_logs)
+        df_call_logs = self.standardize_columns(df_call_logs)
+
+        df_call_logs["call_log_key"] = (
+            df_call_logs["request_id"].astype(str)
+            + "|"
+            + df_call_logs["resolution_status"].astype(str)
+        ).apply(lambda x: hashlib.md5(x.encode()).hexdigest()[:16])
+
+        # problematic records are only read after generating key
+        problematic_records = self.dq_checker.identify_problematic_call_logs(
+            df_call_logs
+        )
+
+        df_call_logs["complaint_category"] = self.apply_transformation(
+            df_call_logs["complaint_category"], self.cleaner.validate_complaint_category
+        )
+        df_call_logs["resolution_status"] = self.apply_transformation(
+            df_call_logs["resolution_status"], self.cleaner.validate_resolution_status
+        )
+
+        problematic_record_location = None
+        if not problematic_records.empty:
+            problematic_record_location = self.upload_problematic_records_to_s3(
+                data=problematic_records,
+                source=call_logs,
+                dest_bucket=config.BRONZE_BUCKET,
+                dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/call-logs-problematic-{self.context['ds']}",
+            )
+
+        metadata = {
+            "rows_processed": len(df_call_logs),
+            "duplicates_removed": duplicate_count,
+            "problematic_rows_excluded": len(problematic_records),
+            "problematic_data_location": (
+                problematic_record_location
+                if problematic_record_location
+                else "No problematic data points"
+            ),
+        }
+        # load df here. too large to return
+        # to be implemented later
+
+        return metadata

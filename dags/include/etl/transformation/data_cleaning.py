@@ -1,4 +1,3 @@
-from typing import Dict, List
 import pandas as pd
 import re
 from include.etl.transformation.enums import (
@@ -10,12 +9,11 @@ from include.etl.transformation.enums import (
     EXPERIENCE_LEVELS,
     MEDIA_CHANNELS,
 )
-from include.exceptions.exceptions import NullAfterCleanError
 
 
 class Cleaner:
-    def __init__(self, problematic_data: List[Dict]):
-        self.problematic_data = problematic_data
+    def __init__(self):
+        pass
 
     @staticmethod
     def standardize_column_name(col: str) -> str:
@@ -38,84 +36,9 @@ class Cleaner:
         return col
 
     @staticmethod
-    def standardize_name(name: str) -> str:
-        return name.strip().title()
-
-    def validate_state(self, state: str) -> str | None:
-        if state.lower() not in STATES:
-            self.problematic_data.append(
-                {"field": "state", "value": state, "reason": "invalid_state"}
-            )
-            return None
-
-        return state.title()
-
-    def validate_experience_level(self, experience: str) -> str | None:
-        if experience.lower() not in EXPERIENCE_LEVELS:
-            self.problematic_data.append(
-                {
-                    "field": "experience",
-                    "value": experience,
-                    "reason": "invalid experience level",
-                }
-            )
-            return None
-
-        return experience.title()
-
-    def validate_complaint_category(self, category: str) -> str | None:
-        if category.lower() not in COMPLAINT_CATEGORIES:
-            self.problematic_data.append(
-                {
-                    "field": "complaint_category",
-                    "value": category,
-                    "reason": "invalid complaint category",
-                }
-            )
-            return None
-
-        return category.title()
-
-    def validate_resolution_status(self, status: str) -> str | None:
-        if status.lower() not in RESOLUTION_STATUS:
-            self.problematic_data.append(
-                {
-                    "field": "resolution_status",
-                    "value": status,
-                    "reason": "invalid resolution status",
-                }
-            )
-            return None
-
-        return status.title()
-
-    def validate_media_channel(self, channel: str) -> str | None:
-        if channel.lower() not in MEDIA_CHANNELS:
-            self.problematic_data.append(
-                {
-                    "field": "social_media_channel",
-                    "value": channel,
-                    "reason": "invalid social media channel",
-                }
-            )
-            return None
-
-        return channel.upper()
-
-    def validate_gender(self, gender: str) -> str | None:
-        if gender.lower() not in GENDER:
-            self.problematic_data.append(
-                {"field": "gender", "value": gender, "reason": "invalid gender"}
-            )
-            return None
-
-        return gender.upper()
-
-    def clean_email(self, email: str) -> str | None:
+    def clean_email(email: str) -> str | None:
         if pd.isna(email):
             return None
-
-        email_copy = email  # original value preserved for data quality logging
 
         email = email.lower().strip()
         email = re.sub(r"@\d+@", "@", email)
@@ -128,13 +51,10 @@ class Cleaner:
 
         if "@" in email and "." in email.split("@")[-1]:
             return email
-
-        self.problematic_data.append(
-            {"field": "email", "value": email_copy, "reason": "invalid email address"}
-        )
         return None
 
-    def extract_state_code(self, address: str) -> str | None:
+    @staticmethod
+    def extract_state_code(address: str) -> str | None:
         if pd.isna(address):
             return None
 
@@ -145,23 +65,16 @@ class Cleaner:
             if state_code in STATE_CODES and len(state_code) in range(2, 4):
                 return state_code
             else:
-                self.problematic_data.append(
-                    {
-                        "field": "address",
-                        "value": address,
-                        "reason": "could not parse state code from address",
-                    }
-                )
-
                 return None
 
     @staticmethod
-    def extract_state(state_code: str) -> str | None:
+    def generate_state(state_code: str) -> str | None:
         if pd.isna(state_code):
             return None
         return STATE_CODES.get(state_code)
 
-    def extract_zip_code(self, address: str) -> str | None:
+    @staticmethod
+    def extract_zip_code(address: str) -> str | None:
         if pd.isna(address):
             return None
 
@@ -169,15 +82,66 @@ class Cleaner:
         if len(parts) >= 2:
             zip_code = parts[-1]
 
-            if len(zip_code) == 5:
+            if zip_code.isdigit() and len(zip_code) == 5:
                 return zip_code
             else:
-                self.problematic_data.append(
-                    {
-                        "field": "address",
-                        "value": address,
-                        "reason": "could not parse zip code from address",
-                    }
-                )
+                return None
 
-        return None
+    @staticmethod
+    def standardize_name(name: str) -> str | None:
+        if pd.isna(name):
+            return None
+        return name.strip().title()
+
+    @staticmethod
+    def validate_state(state: str) -> str | None:
+        if pd.isna(state):
+            return None
+        if state.lower() not in STATES:
+            return None
+
+        return state.title()
+
+    @staticmethod
+    def validate_experience_level(experience: str) -> str | None:
+        if pd.isna(experience):
+            return None
+        if experience.lower() not in EXPERIENCE_LEVELS:
+            return None
+
+        return experience.title()
+
+    @staticmethod
+    def validate_complaint_category(category: str) -> str | None:
+        if pd.isna(category):
+            return None
+        if category.lower() not in COMPLAINT_CATEGORIES:
+            return None
+
+        return category.title()
+
+    @staticmethod
+    def validate_resolution_status(status: str) -> str | None:
+        if pd.isna(status):
+            return None
+        if status.lower() not in RESOLUTION_STATUS:
+            return None
+
+        return status.title()
+
+    @staticmethod
+    def validate_media_channel(channel: str) -> str | None:
+        if pd.isna(channel):
+            return None
+        if channel.lower() not in MEDIA_CHANNELS:
+            return None
+
+        return channel.upper()
+
+    @staticmethod
+    def validate_gender(gender: str) -> str | None:
+        if pd.isna(gender):
+            return None
+        if gender.lower() not in GENDER:
+            return None
+        return gender.upper()
