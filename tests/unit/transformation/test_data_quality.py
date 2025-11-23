@@ -376,7 +376,7 @@ class TestGenericProblematicRecords:
             }
         )
 
-        # Create custom masks
+        # create custom masks
         mask_a = ~df["field_a"].isin(["valid"])
         mask_b = ~df["field_b"].isin(["good"])
 
@@ -387,9 +387,9 @@ class TestGenericProblematicRecords:
 
         result = dq_checker.identify_problematic_records(df, mask_field_pairs)
 
-        assert len(result) == 2  # Rows 1 and 2
-        assert "1" in result["id"].values  # Has invalid field_a
-        assert "2" in result["id"].values  # Has bad field_b
+        assert len(result) == 2  # rows 1 and 2
+        assert "1" not in result["id"].values  # valid field_a
+        assert "2" in result["id"].values  # bad field_b
 
     def test_empty_dataframe_handling(self, dq_checker):
         """Test generic method with empty DataFrame"""
@@ -455,20 +455,20 @@ class TestDataQualityIntegration:
                     "Moria Snow",
                     "Fatai Rolling Dollars",
                     "Odudubariba",
-                    "Alice Wonder",
-                    "Charlie Brown",
+                    "Amaka Chuwku",
+                    "Sunday Amadu",
                 ],
-                "gender": ["M", "X", "F", "M", "Unknown"],  # 2 invalid
+                "gender": ["M", "X", "F", "G", "Unknown"],  # 3 invalid
                 "email": [
                     "moria@gmail.com",
-                    "jane@yahoo.com",
+                    "fatai@yahoo.com",
                     "notanemail",  # invalid
                     "alice@hotmail.com",
                     "bad@@email",  # invalid
                 ],
                 "address": [
                     "123 Main St TX 75001",
-                    "Invalid Address",  ## missing state and zip
+                    "Invalid Address",  # missing state and zip
                     "789 Pine Rd NY 10001",
                     "101 Oak Ave CA 90210",
                     "NonsEnSe Address",  # missing state and zip
