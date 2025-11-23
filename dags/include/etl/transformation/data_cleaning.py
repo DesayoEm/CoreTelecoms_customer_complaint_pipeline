@@ -1,6 +1,6 @@
 import pandas as pd
 import re
-from include.etl.transformation.enums import (
+from dags.include.etl.transformation.enums import (
     STATE_CODES,
     STATES,
     RESOLUTION_STATUS,
@@ -23,16 +23,15 @@ class Cleaner:
             "COMPLAINT_catego ry": "complaint_category",
             "webformgenerationdate": "web_form_generation_date",
             "resolutionstatus": "resolution_status",
-            "MediaComplaintGenerationDate": "media_complaint_generation_date",
-            "callLogsGenerationDate": "call_logs_generation_date",
         }
+
         if col in MANUAL_CORRECTIONS:
-            col = MANUAL_CORRECTIONS.get(col)
-        else:
-            col = col.strip().lower().replace(" ", "_")
-            col = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", col)
-            col = re.sub(r"[^a-z0-9]+", "_", col)
-            col = col.strip("_")
+            return MANUAL_CORRECTIONS[col]
+        col = col.strip()
+        col = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", col)
+        col = col.lower()
+        col = re.sub(r"[^a-z0-9]+", "_", col)
+        col = col.strip("_")
 
         return col
 
@@ -41,18 +40,39 @@ class Cleaner:
         if pd.isna(email):
             return None
 
-        email = email.lower().strip()
-        email = re.sub(r"@\d+@", "@", email)
-        email = re.sub(r"[^a-z0-9._-]+@", "@", email)
+        email = email.strip().lower()
 
-        email = email.replace(".om", ".com")
-        email = email.replace("gmial", "gmail")
-        email = email.replace("hotmai", "hotmail")
-        email = email.replace("hotmaill", "hotmail")
+        if email.count("@") > 1:
+            parts = [p for p in email.split("@") if p]
+            if len(parts) < 2:
+                return None
+            local = parts[-2]
+            domain = parts[-1]
+            email = f"{local}@{domain}"
 
-        if "@" in email and "." in email.split("@")[-1]:
-            return email
-        return None
+        # common domain typos
+        corrections = {
+            ".om": ".com",
+            "gmial": "gmail",
+            "hotmaill.com": "hotmail.com",
+            "hotmai.com": "hotmail.com",
+        }
+        for wrong, right in corrections.items():
+            email = email.replace(wrong, right)
+
+        email = re.sub(r"[^a-z0-9._-]+(?=@)", "", email)
+
+        if email.count("@") != 1:
+            return None
+
+        local, domain = email.split("@", 1)
+
+        if not local:
+            return None
+        if "." not in domain:
+            return None
+
+        return email
 
     @staticmethod
     def extract_state_code(address: str) -> str | None:
