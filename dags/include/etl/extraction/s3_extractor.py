@@ -44,6 +44,7 @@ class S3Extractor:
 
             current_execution_date = self.context.get("ds")
             dest_bucket = config.BRONZE_BUCKET
+
             full_dest_key = (
                 f"{dest_prefix}/{obj_prefix}-{current_execution_date}.parquet"
             )
@@ -167,7 +168,9 @@ class S3Extractor:
         metadata = {
             "src_key": src_key if src_key else "Unknown",
             "destination": (
-                f"{dest_bucket}/{dest_key}" if dest_bucket and dest_key else "Unknown"
+                f"s3://{dest_bucket}/{dest_key}"
+                if dest_bucket and dest_key
+                else "Unknown"
             ),
             "row_count": row_count,
             "file_size_bytes": file_size_bytes,

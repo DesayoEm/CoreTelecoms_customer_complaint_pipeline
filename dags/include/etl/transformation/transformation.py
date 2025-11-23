@@ -3,7 +3,11 @@ import io
 import json
 from datetime import datetime
 import pandas as pd
+from concurrent.futures import ProcessPoolExecutor
+import numpy as np
 import hashlib
+from multiprocessing.dummy import Pool as ThreadPool
+
 
 from include.config import config
 from include.etl.transformation.data_cleaning import Cleaner
@@ -24,9 +28,20 @@ class Transformer:
         self.dq_checker = DataQualityChecker(self.cleaner)
 
     @staticmethod
-    def apply_transformation(series, func, parallel_threshold=100000):
+    def parallel_apply_threaded(series, func, workers=8):
+        """
+        Apply function in parallel using ThreadPool.ThreadPool used instead of ProcessPoolExecutor because Airflow workers
+        are daemonic processes and cannot spawn child processes.
+        Although ThreadPool is limited by Python's GIL for CPU-bound operations, it still provides some parallelism for pandas operations that release the GIL.
+        """
+        with ThreadPool(workers) as p:
+            chunks = np.array_split(series, workers)
+            results = p.map(lambda s: s.apply(func), chunks)
+        return pd.concat(results)
+
+    def apply_transformation(self, series, func, parallel_threshold=100000):
         if len(series) > parallel_threshold:
-            return series.parallel_apply(func)
+            return self.parallel_apply_threaded(series, func)
         return series.apply(func)
 
     @staticmethod
@@ -192,7 +207,7 @@ class Transformer:
         df_agents["state"] = df_agents["state"].apply(self.cleaner.validate_state)
 
         problematic_record_location = None
-        if problematic_records:
+        if not problematic_records.empty:
             problematic_record_location = self.upload_problematic_records_to_s3(
                 data=problematic_records,
                 source=agent_data,
@@ -283,7 +298,7 @@ class Transformer:
         df_complaints = self.standardize_columns(df_complaints)
 
         df_complaints["sm_complaint_key"] = (
-            df_complaints["request_id"].astype(str)
+            df_complaints["complaint_id"].astype(str)
             + "|"
             + df_complaints["resolution_status"].astype(str)
         ).apply(lambda x: hashlib.md5(x.encode()).hexdigest()[:16])
@@ -336,12 +351,13 @@ class Transformer:
         except Exception as e:
             raise DataLoadError(error=e, obj_type="Call logs")
 
-        df_call_logs = df_call_logs.drop(columns=["unnamed_0"])
+        df_call_logs = df_call_logs.drop(columns=["Unnamed: 0"])
+
         df_call_logs, duplicate_count = self.remove_duplicates(df_call_logs)
         df_call_logs = self.standardize_columns(df_call_logs)
 
         df_call_logs["call_log_key"] = (
-            df_call_logs["request_id"].astype(str)
+            df_call_logs["call_id"].astype(str)
             + "|"
             + df_call_logs["resolution_status"].astype(str)
         ).apply(lambda x: hashlib.md5(x.encode()).hexdigest()[:16])

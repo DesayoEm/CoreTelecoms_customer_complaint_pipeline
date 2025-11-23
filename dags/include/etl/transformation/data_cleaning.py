@@ -20,10 +20,11 @@ class Cleaner:
         MANUAL_CORRECTIONS = {
             "custome_r_i_d": "customer_id",
             "complaint_catego_ry": "complaint_category",
+            "COMPLAINT_catego ry": "complaint_category",
             "webformgenerationdate": "web_form_generation_date",
             "resolutionstatus": "resolution_status",
             "MediaComplaintGenerationDate": "media_complaint_generation_date",
-            "COMPLAINT_catego ry": "complaint_category",
+            "callLogsGenerationDate": "call_logs_generation_date",
         }
         if col in MANUAL_CORRECTIONS:
             col = MANUAL_CORRECTIONS.get(col)
