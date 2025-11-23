@@ -1,6 +1,7 @@
-#!/bin/bash
+repo_root="$(git rev-parse --show-toplevel)"
+export PYTHONPATH="$repo_root"
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export PYTHONPATH="$PROJECT_ROOT"
+cd "$repo_root"
 
-python3 -m pytest "$PROJECT_ROOT/" -v --ignore="$PROJECT_ROOT/logs"
+pytest "tests/unit" -v --ignore="logs"
+
