@@ -15,23 +15,18 @@ class TestStandardizeColumnName:
             ("COMPLAINT_catego ry", "complaint_category"),
             ("webformgenerationdate", "web_form_generation_date"),
             ("resolutionstatus", "resolution_status"),
-
             # spaces and camelcase
             ("CustomerName", "customer_name"),
             ("  SpacedOut  ", "spaced_out"),
             ("EmailAddress", "email_address"),
             ("ComplaintID", "complaint_id"),
-
             # spaces and special chars
             ("First Name", "first_name"),
             ("Email-Address", "email_address"),
             ("user@domain", "user_domain"),
-
             # already clean
             ("customer_id", "customer_id"),
             ("email", "email"),
-
-
         ],
     )
     def test_standardize_column_name(self, input_col, expected):
@@ -48,18 +43,14 @@ class TestCleanEmail:
             ("test@gmail.com", "test@gmail.com"),
             ("Test@Gmail.COM", "test@gmail.com"),
             ("  user@example.com  ", "user@example.com"),
-
             # common typos should be fixed
             ("test@gmail.om", "test@gmail.com"),
             ("test@gmial.com", "test@gmail.com"),
             ("test@hotmai.com", "test@hotmail.com"),
             ("test@hotmaill.com", "test@hotmail.com"),
-
             # invalidpatterns should be cleaned
             ("test@123@gmail.com", "123@gmail.com"),  # Double @ with numbers
             ("test@@gmail.com", "test@gmail.com"),  # Special chars before @
-
-
             # invalidemails should return None
             ("notanemail", None),
             ("missing@domain", None),
@@ -67,7 +58,6 @@ class TestCleanEmail:
             ("noat.com", None),
             ("test@", None),
             ("@domain.com", None),
-
             # null handling
             (None, None),
             (pd.NA, None),

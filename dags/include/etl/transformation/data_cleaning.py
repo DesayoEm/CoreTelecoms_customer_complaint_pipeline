@@ -50,7 +50,7 @@ class Cleaner:
             domain = parts[-1]
             email = f"{local}@{domain}"
 
-        #common domain typos
+        # common domain typos
         corrections = {
             ".om": ".com",
             "gmial": "gmail",
@@ -73,7 +73,6 @@ class Cleaner:
             return None
 
         return email
-
 
     @staticmethod
     def extract_state_code(address: str) -> str | None:
