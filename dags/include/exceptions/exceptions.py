@@ -44,3 +44,21 @@ class SQLReadError(DataIngestionError):
         message = f"{details}"
         super().__init__(message)
         self.log = message
+
+
+class NullAfterCleanError(DataQualityWarning):
+    """Raised when an attempt to clean a value fails and returns None"""
+
+    def __init__(self, value: str, obj_type: str, field: str):
+        message = f"{field} on {obj_type}failed cleaning {value}"
+        super().__init__(message)
+        self.log = message
+
+
+class DataLoadError(DataQualityWarning):
+    """Raised when an attempt to load an object from the bronze layer fails"""
+
+    def __init__(self, error: str, obj_type: str):
+        message = f"Failed to load {obj_type} DETAIL: {error}"
+        super().__init__(message)
+        self.log = message

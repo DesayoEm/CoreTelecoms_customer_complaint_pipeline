@@ -77,8 +77,7 @@ class SQLEXtractor:
 
         metadata = {
             "source_name": table_name if table_name else "Unknown",
-            "dest_bucket": dest_bucket if dest_bucket else "Unknown",
-            "dest_key": dest_key if dest_key else "Unknown",
+            "destination": f"s3://{dest_bucket}/{dest_key}" if dest_key else "Unknown",
             "manifest_key": manifest_key if manifest_key else "Unknown",
             "row_count": row_count,
             "file_size_bytes": file_size_bytes,

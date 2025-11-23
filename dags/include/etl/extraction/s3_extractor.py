@@ -44,6 +44,7 @@ class S3Extractor:
 
             current_execution_date = self.context.get("ds")
             dest_bucket = config.BRONZE_BUCKET
+
             full_dest_key = (
                 f"{dest_prefix}/{obj_prefix}-{current_execution_date}.parquet"
             )
@@ -167,7 +168,9 @@ class S3Extractor:
         metadata = {
             "src_key": src_key if src_key else "Unknown",
             "destination": (
-                f"{dest_bucket}/{dest_key}" if dest_bucket and dest_key else "Unknown"
+                f"s3://{dest_bucket}/{dest_key}"
+                if dest_bucket and dest_key
+                else "Unknown"
             ),
             "row_count": row_count,
             "file_size_bytes": file_size_bytes,
@@ -197,7 +200,7 @@ class S3Extractor:
         """Copies social media complaints from source S3 to destination S3."""
         return self.copy_data(
             src_key="social_medias/media_complaint_day_2025-11-20.json",  # deterministic key to be configured
-            dest_prefix=config.CALL_LOGS_OBJ_PREFIX,
+            dest_prefix=config.SM_COMPLAINTS_STAGING_DEST,
             obj_prefix=config.SM_COMPLAINTS_OBJ_PREFIX,
             obj_type="social media complaints",
         )

@@ -9,6 +9,10 @@ class DataIngestionError(CoreTelecomsException):
 
 
 class DataQualityWarning(CoreTelecomsException):
-    """Data quality issue - pipeline can continue with logging"""
+    """
+    Parent exception class for quality issues.
+    Raised initially on trigger bur not raised down the call stack
+    Pipeline can continue with logging
+    """
 
     pass
