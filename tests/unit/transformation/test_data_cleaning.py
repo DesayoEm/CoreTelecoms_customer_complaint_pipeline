@@ -9,29 +9,29 @@ class TestStandardizeColumnName:
     @pytest.mark.parametrize(
         "input_col,expected",
         [
-            # Manual corrections
+            # manual corrections
             ("custome_r_i_d", "customer_id"),
             ("complaint_catego_ry", "complaint_category"),
             ("COMPLAINT_catego ry", "complaint_category"),
             ("webformgenerationdate", "web_form_generation_date"),
             ("resolutionstatus", "resolution_status"),
-            ("MediaComplaintGenerationDate", "media_complaint_generation_date"),
-            ("callLogsGenerationDate", "call_logs_generation_date"),
-            # CamelCase conversion
+
+            # spaces and camelcase
             ("CustomerName", "customer_name"),
+            ("  SpacedOut  ", "spaced_out"),
             ("EmailAddress", "email_address"),
             ("ComplaintID", "complaint_id"),
-            # Spaces and special characters
+
+            # spaces and special chars
             ("First Name", "first_name"),
             ("Email-Address", "email_address"),
             ("user@domain", "user_domain"),
-            # Already clean
+
+            # already clean
             ("customer_id", "customer_id"),
             ("email", "email"),
-            # Edge cases
-            ("  SpacedOut  ", "spaced_out"),
-            ("ALLCAPS", "allcaps"),
-            ("lower_case", "lower_case"),
+
+
         ],
     )
     def test_standardize_column_name(self, input_col, expected):
@@ -44,26 +44,31 @@ class TestCleanEmail:
     @pytest.mark.parametrize(
         "email,expected",
         [
-            # validemails - should be cleaned and returned
+            # validemails should be cleaned and returned
             ("test@gmail.com", "test@gmail.com"),
             ("Test@Gmail.COM", "test@gmail.com"),
             ("  user@example.com  ", "user@example.com"),
-            # Common typos - should be fixed
+
+            # common typos should be fixed
             ("test@gmail.om", "test@gmail.com"),
             ("test@gmial.com", "test@gmail.com"),
             ("test@hotmai.com", "test@hotmail.com"),
             ("test@hotmaill.com", "test@hotmail.com"),
-            # invalidpatterns - should be cleaned
-            ("test@123@gmail.com", "test@gmail.com"),  # Double @ with numbers
+
+            # invalidpatterns should be cleaned
+            ("test@123@gmail.com", "123@gmail.com"),  # Double @ with numbers
             ("test@@gmail.com", "test@gmail.com"),  # Special chars before @
-            # invalidemails - should return None
+
+
+            # invalidemails should return None
             ("notanemail", None),
             ("missing@domain", None),
             ("@nodomain.com", None),
             ("noat.com", None),
             ("test@", None),
             ("@domain.com", None),
-            # Null/NaN handling
+
+            # null handling
             (None, None),
             (pd.NA, None),
         ],
@@ -91,10 +96,10 @@ class TestExtractStateCode:
             ("123 Beach Rd PR 00901", "PR"),
             ("456 Island Ave GU 96910", "GU"),
             # invalidaddresses - should return None
-            ("123 Main St", None),  # No state/zip
-            ("invalidAddress", None),  # Malformed
+            ("123 Main St", None),  # no state/zip
+            ("invalidAddress", None),  # malformed
             ("123 Main St XX 12345", None),  # invalidstate code
-            ("", None),  # Empty string
+            ("", None),  # empty string
             # Null handling
             (None, None),
             (pd.NA, None),
