@@ -58,7 +58,7 @@ class NullAfterCleanError(DataQualityWarning):
 class DataLoadError(DataQualityWarning):
     """Raised when an attempt to load an object from the bronze layer fails"""
 
-    def __init__(self, error: str, obj_type: str):
-        message = f"Failed to load {obj_type} DETAIL: {error}"
+    def __init__(self, error: str, entity_type: str):
+        message = f"Failed to load {entity_type} DETAIL: {error}"
         super().__init__(message)
         self.log = message

@@ -49,7 +49,7 @@ class GoogleSheetsExtractor:
                 service_name="secretsmanager", region_name=config.AWS_REGION
             )
 
-            response = client.get_secret_value(SecretId="google_cloud_credv2")
+            response = client.get_secret_value(SecretId="google_cloud_credv3")
             return json.loads(response["SecretString"])
 
         except Exception as e:
