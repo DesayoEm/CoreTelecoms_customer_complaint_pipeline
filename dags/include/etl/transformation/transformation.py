@@ -10,6 +10,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 from include.config import config
 from include.etl.transformation.data_cleaning import Cleaner
 from include.etl.transformation.data_quality import DataQualityChecker
+from include.etl.load.load import Loader
 from include.exceptions.exceptions import DataLoadError
 
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
@@ -24,7 +25,7 @@ class Transformer:
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
         self.cleaner = Cleaner()
         self.dq_checker = DataQualityChecker(self.cleaner)
-        self.loader = None  # to be implemented
+        self.loader = Loader(self.context, self.s3_dest_hook)
         self.problematic_records: pd.DataFrame = pd.DataFrame()
         self.batch_size: int = 100000
         self.duplicate_count: int = 0
@@ -130,16 +131,78 @@ class Transformer:
 
         total_rows = len(entity_df)
         if total_rows > self.batch_size:
-            self.transform_and_load_batched(
+            self.transform_and_load_batches(
                 entity_data_location, entity_type, entity_df, total_rows
             )
         else:
             self.transform_and_load_all(entity_data_location, entity_type, entity_df)
 
+    def transform_and_load_batches(
+        self, location: str, entity_type: str, entity_df: pd.DataFrame, total_rows: int
+    ):
+        from dags.include.etl.transformation.configurations.entity_class_config import (
+            ENTITY_CLASS_CONFIG,
+        )
+
+        method_name = ENTITY_CLASS_CONFIG.get(entity_type.lower())
+        if not method_name:
+            raise ValueError(f"Unknown entity type: {entity_type}")
+
+        transformer_method = getattr(self, method_name)
+
+        start_batch = self.loader.load_checkpoint().get("last_completed_batch", 0)
+        for batch_num in range(start_batch, (total_rows // self.batch_size) + 1):
+            start_idx = batch_num * self.batch_size
+            end_idx = min(start_idx + self.batch_size, total_rows)
+
+            current_batch = entity_df.iloc[start_idx:end_idx].copy()
+            batch_duplicates, batch_problems = transformer_method(current_batch)
+
+            # duplicate count and problematic data are accumulated across batch iterations
+            self.duplicate_count += batch_duplicates
+            self.problematic_records = pd.concat(
+                [self.problematic_records, batch_problems], ignore_index=True
+            )
+
+            self.loader.load_data(current_batch, entity_type)
+            self.loader.save_checkpoint(
+                batch_num=batch_num,
+                rows_loaded=self.loader.rows_loaded
+            )
+
+            log.info(
+                f"Completed batch {batch_num + 1}, processed {end_idx}/{total_rows} rows"
+            )
+
+
+        problematic_record_location = None
+        if (
+            not self.problematic_records.empty
+        ):
+            problematic_record_location = self.upload_problematic_records_to_s3(
+                data=self.problematic_records,
+                source=location,
+                dest_bucket=config.BRONZE_BUCKET,
+                dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/{entity_type}-problematic-{self.context['ds']}",
+            )
+
+        metadata = {
+            "rows_processed": total_rows,
+            "duplicates_removed": self.duplicate_count,
+            "problematic_rows_excluded": len(self.problematic_records),
+            "problematic_data_location": (
+                problematic_record_location
+                if problematic_record_location
+                else "No problematic data points"
+            )
+        }
+
+        return metadata
+
     def transform_and_load_all(
         self, location: str, entity_type: str, entity_df: pd.DataFrame
     ) -> Dict[str, Any]:
-        from dags.include.etl.transformation.entity_class_config import (
+        from dags.include.etl.transformation.configurations.entity_class_config import (
             ENTITY_CLASS_CONFIG,
         )  # scoped import to avoid circular imports
 
@@ -171,66 +234,7 @@ class Transformer:
         }
         return metadata
 
-    def transform_and_load_batched(
-        self, location: str, entity_type: str, entity_df: pd.DataFrame, total_rows: int
-    ):
-        from dags.include.etl.transformation.entity_class_config import (
-            ENTITY_CLASS_CONFIG,
-        )
 
-        method_name = ENTITY_CLASS_CONFIG.get(entity_type.lower())
-        if not method_name:
-            raise ValueError(f"Unknown entity type: {entity_type}")
-
-        transformer_method = getattr(self, method_name)
-
-        start_batch = self.loader.load_checkpoint().get("last_completed_batch", 0)
-        for batch_num in range(start_batch, (total_rows // self.batch_size) + 1):
-            start_idx = batch_num * self.batch_size
-            end_idx = min(start_idx + self.batch_size, total_rows)
-
-            current_batch = entity_df.iloc[start_idx:end_idx].copy()
-            batch_duplicates, batch_problems = transformer_method(current_batch)
-
-            # duplicate count and problematic data are accumulated across batch iterations
-            self.duplicate_count += batch_duplicates
-            self.problematic_records = pd.concat(
-                [self.problematic_records, batch_problems], ignore_index=True
-            )
-
-            log.info(
-                f"Completed batch {batch_num + 1}, processed {end_idx}/{total_rows} rows"
-            )
-
-            # self.loader.save_checkpoint('customers', {
-            #     'last_completed_batch': batch_num,
-            #     'rows_processed': end_idx,
-            #     'timestamp': datetime.now().isoformat()
-            # })
-
-        problematic_record_location = None
-        if (
-            not self.problematic_records.empty
-        ):  # now a class attr as data needs to be saved across iterations
-            problematic_record_location = self.upload_problematic_records_to_s3(
-                data=self.problematic_records,
-                source=location,
-                dest_bucket=config.BRONZE_BUCKET,
-                dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/{entity_type}-problematic-{self.context['ds']}",
-            )
-
-        metadata = {
-            "rows_processed": total_rows,
-            "duplicates_removed": self.duplicate_count,
-            "problematic_rows_excluded": len(self.problematic_records),
-            "problematic_data_location": (
-                problematic_record_location
-                if problematic_record_location
-                else "No problematic data points"
-            ),
-        }
-
-        return metadata
 
     def transform_and_load_customer_data(self, customers_df: pd.DataFrame) -> Tuple:
 

@@ -2,7 +2,7 @@ from typing import List, Dict, Tuple
 import pandas as pd
 from datetime import datetime
 from dags.include.etl.transformation.data_cleaning import Cleaner
-from dags.include.etl.transformation.enums import (
+from dags.include.etl.transformation.configurations.enums import (
     GENDER,
     EXPERIENCE_LEVELS,
     STATES,

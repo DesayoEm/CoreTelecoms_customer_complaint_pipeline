@@ -1,6 +1,6 @@
 import pandas as pd
 import re
-from dags.include.etl.transformation.enums import (
+from dags.include.etl.transformation.configurations.enums import (
     STATE_CODES,
     STATES,
     RESOLUTION_STATUS,
