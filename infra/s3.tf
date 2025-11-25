@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "coretelecoms-lake" {
-  bucket = "coretelecoms-data-lake"
+  bucket        = "coretelecoms-data-lake"
   force_destroy = true
 
   tags = {
@@ -33,6 +33,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "coretelecoms_lake_archive_life
     }
   }
 
-  }
+}
 
 
