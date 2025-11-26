@@ -23,7 +23,9 @@ class Cleaner:
             "COMPLAINT_catego ry": "complaint_category",
             "webformgenerationdate": "web_form_generation_date",
             "resolutionstatus": "resolution_status",
+            "customeR iD": "customer_id",
             "iD": "id",
+            "DATE of biRTH": "date_of_birth",
             "NamE": "name",
         }
 
@@ -89,6 +91,10 @@ class Cleaner:
                 return state_code
             else:
                 return None
+
+    @staticmethod
+    def extract_date_from_timestamp(timestamp_str: str) -> str | None:
+        return timestamp_str.split()[0]
 
     @staticmethod
     def generate_state(state_code: str) -> str | None:

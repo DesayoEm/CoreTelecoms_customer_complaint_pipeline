@@ -6,7 +6,7 @@ from include.etl.extraction.google_extractor import GoogleSheetsExtractor
 from include.etl.extraction.sql_extractor import SQLEXtractor
 from include.etl.transformation.transformation import Transformer
 from include.notifications.success_notification import success_notification
-
+from include.etl.load.create_tables import create_conformance_tables
 
 from airflow.utils.log.logging_mixin import LoggingMixin
 
@@ -65,6 +65,10 @@ def process_complaint_data():
         return extractor.copy_web_complaints()
 
     @task
+    def create_conformance_table_task():
+        return create_conformance_tables()
+
+    @task
     def transform_and_load_customers_task(metadata):
         context = get_current_context()
         transformer = Transformer(context=context)
@@ -109,13 +113,15 @@ def process_complaint_data():
 
     # raw_customer_data = ingest_customer_data_task()
     raw_agents_data = ingest_agents_data_task()
-    raw_call_logs = ingest_call_logs_task()
+    # raw_call_logs = ingest_call_logs_task()
     # raw_sm_complaints = ingest_sm_complaints_task()
     # raw_web_complaints_data = ingest_web_complaints_data_task()
 
+    tables =create_conformance_table_task()
+
     # transform_and_load_customers = transform_and_load_customers_task(raw_customer_data)
-    # transform_and_load_agents = transform_and_load_agents_task(raw_agents_data)
-    transform_and_load_call_logs = transform_and_load_call_logs_task(raw_call_logs)
+    transform_and_load_agents = transform_and_load_agents_task(raw_agents_data)
+    # transform_and_load_call_logs = transform_and_load_call_logs_task(raw_call_logs)
     # transform_and_load_sm_complaints = transform_and_load_sm_complaints_task(
     #     raw_sm_complaints
     # )

@@ -30,4 +30,4 @@ def list_and_delete_all_tables(conn_string: str, dry_run: bool = True):
 
 
 if __name__ == "__main__":
-    list_and_delete_all_tables(config.DEST_DB_CONN_STRING, False)
+    list_and_delete_all_tables(config.SILVER_DB_CONN_STRING, False)

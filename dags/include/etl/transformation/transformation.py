@@ -420,6 +420,9 @@ class Transformer:
         df_call_logs["complaint_category"] = self.apply_transformation(
             df_call_logs["complaint_category"], self.cleaner.validate_complaint_category
         )
+        df_call_logs["request_date"] = self.apply_transformation(
+            df_call_logs["call_start_time"], self.cleaner.extract_date_from_timestamp
+        )
         df_call_logs["resolution_status"] = self.apply_transformation(
             df_call_logs["resolution_status"], self.cleaner.validate_resolution_status
         )

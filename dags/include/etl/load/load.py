@@ -49,7 +49,7 @@ class Loader:
 
     def __init__(self, context: Dict, s3_dest_hook=None):
         self.context = context
-        self.conn_string = config.DEST_DB_CONN_STRING
+        self.conn_string = config.SILVER_DB_CONN_STRING
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
 
         self.state = StateLoader.load_starting_point_from_context(context)
@@ -112,11 +112,11 @@ class Loader:
         ti.xcom_push(key="checkpoint", value=checkpoint)
         log.info(f"Checkpoint saved: batch {batch_num}")
 
-    def get_table_name(self, entity_type: str) -> str:
-        """Generate table name from entity type and execution date."""
-        date_suffix = self.context["ds"].replace("-", "_")
+    @staticmethod
+    def get_table_name(entity_type: str) -> str:
+        """Generate table name from entity type"""
         entity_type = entity_type.replace(" ", "_")
-        return f"{entity_type}_{date_suffix}"
+        return f"conformed_{entity_type}"
 
     def upload_to_s3(
         self, data: pd.DataFrame, source: str, dest_bucket: str, dest_key: str
