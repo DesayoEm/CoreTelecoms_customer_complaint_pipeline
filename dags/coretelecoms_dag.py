@@ -111,23 +111,30 @@ def process_complaint_data():
             metadata["destination"], "web complaints"
         )
 
+
     raw_customer_data = ingest_customer_data_task()
     raw_agents_data = ingest_agents_data_task()
     raw_call_logs = ingest_call_logs_task()
     raw_sm_complaints = ingest_sm_complaints_task()
     raw_web_complaints_data = ingest_web_complaints_data_task()
 
+
     tables = create_conformance_table_task()
 
     transform_and_load_customers = transform_and_load_customers_task(raw_customer_data)
     transform_and_load_agents = transform_and_load_agents_task(raw_agents_data)
+
+    tables >> [transform_and_load_customers, transform_and_load_agents]
+
     transform_and_load_call_logs = transform_and_load_call_logs_task(raw_call_logs)
-    transform_and_load_sm_complaints = transform_and_load_sm_complaints_task(
-        raw_sm_complaints
-    )
-    transform_and_load_web_complaints = transform_and_load_web_complaints_task(
-        raw_web_complaints_data
-    )
+    transform_and_load_sm_complaints = transform_and_load_sm_complaints_task(raw_sm_complaints)
+    transform_and_load_web_complaints = transform_and_load_web_complaints_task(raw_web_complaints_data)
+
+    [transform_and_load_customers, transform_and_load_agents] >> [
+        transform_and_load_call_logs,
+        transform_and_load_sm_complaints,
+        transform_and_load_web_complaints
+    ]
 
 
 process_complaint_data()
