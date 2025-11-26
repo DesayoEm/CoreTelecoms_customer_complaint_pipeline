@@ -1,4 +1,5 @@
 from typing import Dict, Tuple, Any
+from sqlalchemy import text
 import io
 import json
 from datetime import datetime
@@ -188,7 +189,7 @@ class Transformer:
                 dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/{entity_type}-problematic-{self.context['ds']}",
             )
         table_name = self.loader.get_table_name(entity_type)
-        # table name will always be reliablt consistent as long as transformer shares the same interface with load
+        # table name will always be reliably consistent as long as transformer shares the same interface with load
         manifest_key = self.loader.create_load_manifest(entity_type, table_name)
 
         metadata = {

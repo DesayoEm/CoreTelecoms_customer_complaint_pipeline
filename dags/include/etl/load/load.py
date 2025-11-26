@@ -3,7 +3,7 @@ from typing import Dict, Tuple
 import io
 import json
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from datetime import datetime
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
@@ -57,21 +57,148 @@ class Loader:
         self.rows_loaded = self.state.rows_loaded
 
     def load_data(self, data: pd.DataFrame, entity_type: str):
-        table_name = self.get_table_name(entity_type)
+        table = self.get_table_name(entity_type)
+        staging_table = f"staging_{table}"
+
         engine = create_engine(self.conn_string)
 
         with engine.begin() as conn:
             data.to_sql(
-                table_name,
+                staging_table,
                 conn,
-                if_exists="append",
+                if_exists="replace",
                 index=False,
                 method="multi",
                 chunksize=10000,
             )
+            if entity_type == "customers":
+                result = conn.execute(
+                    text(
+                        f"""
+                    INSERT INTO {table}
+                    SELECT * FROM {staging_table}
+                    ON CONFLICT (customer_id)
+                    DO UPDATE SET
+                        name = EXCLUDED.name,
+                        date_of_birth = EXCLUDED.date_of_birth,
+                        signup_date = EXCLUDED.signup_date,
+                        email = EXCLUDED.email,
+                        full_address = EXCLUDED.full_address,
+                        zip_code = EXCLUDED.zip_code,
+                        state_code = EXCLUDED.state_code,
+                        state = EXCLUDED.state,
+                        last_updated_at = CURRENT_TIMESTAMP
+                    """
+                    )
+                )
 
-        self.rows_loaded += len(data)
-        log.info(f"Loaded {len(data)} rows to {table_name}")
+            elif "complaints" in entity_type:
+                self.load_complaints_with_fk_validation(conn, staging_table, table)
+
+            else:  # agents
+                result = conn.execute(
+                    text(
+                        f"""
+                    INSERT INTO {table}
+                    SELECT * FROM {staging_table}
+                    ON CONFLICT (id)
+                    DO UPDATE SET
+                        experience = EXCLUDED.experience,
+                        last_updated_at = CURRENT_TIMESTAMP
+                        
+                        """
+                    )
+                )
+
+        rows_affected = result.rowcount
+
+        self.rows_loaded += rows_affected
+        log.info(f"Loaded/updated {rows_affected} rows to {table}")
+
+    def load_complaints_with_fk_validation(self, conn, staging_table, target_table):
+        result = conn.execute(
+            text(
+                f"""
+            INSERT INTO {target_table}
+                SELECT * FROM {staging_table}
+                ON CONFLICT (complaint_id)
+                    DO UPDATE SET
+                        resolution_status = EXCLUDED.resolution_status,
+                        resolution_date = EXCLUDED.resolution_date,
+                        last_updated_at = CURRENT_TIMESTAMP
+                    """
+            )
+        )
+
+        fk_violations = conn.execute(
+            text(
+                f"""
+            SELECT s.*
+            FROM {staging_table} s
+            LEFT JOIN conformed_customers c ON s.customer_id = c.customer_id
+            LEFT JOIN conformed_agents a ON s.agent_id = a.agent_id
+            WHERE c.customer_id IS NULL OR a.agent_id IS NULL
+            """
+            )
+        ).fetchall()
+
+        if fk_violations:
+            self.save_to_quarantine(fk_violations, target_table, "fk_violation")
+            log.warning(f"Quarantined {len(fk_violations)} records with FK violations")
+
+        rows_inserted = conn.execute(
+            text(
+                f"""
+            INSERT INTO {target_table}
+            SELECT s.*
+            FROM {staging_table} s
+            INNER JOIN conformed_customers c ON s.customer_id = c.customer_id
+            INNER JOIN conformed_agents a ON s.agent_id = a.agent_id
+            ON CONFLICT (complaint_id) DO UPDATE SET
+                resolution_status = EXCLUDED.resolution_status,
+                resolution_date = EXCLUDED.resolution_date,
+                updated_at = CURRENT_TIMESTAMP
+        """
+            )
+        ).rowcount
+
+        log.info(f"Loaded {rows_inserted} valid records to {target_table}")
+
+    def create_quarantine_table(self):
+        engine = create_engine(self.conn_string)
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS data_quality_quarantine (
+                        id SERIAL PRIMARY KEY,
+                        table_name VARCHAR(100),
+                        issue_type VARCHAR(50),
+                        record_data JSONB,
+                        error_message TEXT,
+                        quarantined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """
+                )
+            )
+
+    def save_to_quarantine(self, records, table_name, issue_type):
+        engine = create_engine(self.conn_string)
+        with engine.begin() as conn:
+            for record in records:
+                conn.execute(
+                    text(
+                        """
+                    INSERT INTO data_quality_quarantine (table_name, issue_type, record_data)
+                    VALUES (:table_name, :issue_type, :record_data)
+                """
+                    ),
+                    {
+                        "table_name": table_name,
+                        "issue_type": issue_type,
+                        "record_data": json.dumps(dict(record)),
+                    },
+                )
 
     def create_load_manifest(self, entity_type: str, table_name: str) -> str:
 

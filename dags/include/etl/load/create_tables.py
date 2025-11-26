@@ -25,6 +25,7 @@ def create_conformance_tables():
                 zip_code VARCHAR(5),
                 state_code VARCHAR(2),
                 state VARCHAR(50),
+                last_updated_at TIMESTAMP
                 etl_loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """
@@ -41,6 +42,7 @@ def create_conformance_tables():
                 name VARCHAR(50) NOT NULL,
                 experience VARCHAR(50),
                 state VARCHAR(50),
+                last_updated_at TIMESTAMP
                 etl_loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """
@@ -62,6 +64,7 @@ def create_conformance_tables():
                 resolution_date DATE,
                 resolution_status VARCHAR(50),
                 media_complaint_generation_date DATE,
+                last_updated_at TIMESTAMP
                 etl_loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (customer_id) REFERENCES conformed_customers(customer_id),
                 FOREIGN KEY (agent_id) REFERENCES conformed_agents(id)
@@ -84,6 +87,7 @@ def create_conformance_tables():
                 resolution_date DATE,
                 resolution_status VARCHAR(50),
                 web_form_generation_date DATE,
+                last_updated_at TIMESTAMP
                 etl_loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (customer_id) REFERENCES conformed_customers(customer_id),
                 FOREIGN KEY (agent_id) REFERENCES conformed_agents(id)
@@ -107,6 +111,7 @@ def create_conformance_tables():
                 request_date DATE,
                 resolution_status VARCHAR(50),
                 call_logs_generation_date DATE,
+                last_updated_at TIMESTAMP
                 etl_loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (customer_id) REFERENCES conformed_customers(customer_id),
                 FOREIGN KEY (agent_id) REFERENCES conformed_agents(id)
