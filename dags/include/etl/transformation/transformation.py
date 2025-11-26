@@ -91,7 +91,7 @@ class Transformer:
                 "dag_id": self.context["dag"].dag_id,
                 "run_id": self.context["run_id"],
                 "execution_date": self.context["ds"],
-            },
+            }
         }
 
         manifest_key = dest_key.replace(".parquet", "-manifest.json")
@@ -137,11 +137,16 @@ class Transformer:
         else:
             self.transform_and_load_all(entity_data_location, entity_type, entity_df)
 
+
     def transform_and_load_batches(
         self, location: str, entity_type: str, entity_df: pd.DataFrame, total_rows: int
     ):
-        from dags.include.etl.transformation.configurations.entity_class_config import (
+        from include.etl.transformation.config.entity_class_config import (
             ENTITY_CLASS_CONFIG,
+        )
+        log.info(
+            f"{total_rows} rows. {entity_type} will be loaded in "
+            f"{round(total_rows / self.batch_size)} batches"
         )
 
         method_name = ENTITY_CLASS_CONFIG.get(entity_type.lower())
@@ -150,24 +155,25 @@ class Transformer:
 
         transformer_method = getattr(self, method_name)
 
-        start_batch = self.loader.load_checkpoint().get("last_completed_batch", 0)
+        start_batch = self.loader.state.last_completed_batch
+
         for batch_num in range(start_batch, (total_rows // self.batch_size) + 1):
             start_idx = batch_num * self.batch_size
             end_idx = min(start_idx + self.batch_size, total_rows)
 
             current_batch = entity_df.iloc[start_idx:end_idx].copy()
-            batch_duplicates, batch_problems = transformer_method(current_batch)
+            batch_duplicates, batch_problems = transformer_method(current_batch, entity_type)
 
             # duplicate count and problematic data are accumulated across batch iterations
             self.duplicate_count += batch_duplicates
             self.problematic_records = pd.concat(
                 [self.problematic_records, batch_problems], ignore_index=True
             )
-
+            
             self.loader.load_data(current_batch, entity_type)
             self.loader.save_checkpoint(
-                batch_num=batch_num,
-                rows_loaded=self.loader.rows_loaded
+                batch_num=batch_num + 1,
+                rows_loaded=batch_num * self.batch_size
             )
 
             log.info(
@@ -185,9 +191,13 @@ class Transformer:
                 dest_bucket=config.BRONZE_BUCKET,
                 dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/{entity_type}-problematic-{self.context['ds']}",
             )
-
+        table_name = self.loader.get_table_name(entity_type) 
+        #table name will always be reliablt consistent as long as transformer shares the same interface with load
+        manifest_key = self.loader.create_load_manifest(entity_type,table_name)
+            
         metadata = {
             "rows_processed": total_rows,
+            "manifest_key": manifest_key,
             "duplicates_removed": self.duplicate_count,
             "problematic_rows_excluded": len(self.problematic_records),
             "problematic_data_location": (
@@ -202,16 +212,17 @@ class Transformer:
     def transform_and_load_all(
         self, location: str, entity_type: str, entity_df: pd.DataFrame
     ) -> Dict[str, Any]:
-        from dags.include.etl.transformation.configurations.entity_class_config import (
+        from include.etl.transformation.config.entity_class_config import (
             ENTITY_CLASS_CONFIG,
         )  # scoped import to avoid circular imports
 
+        log.info(f"Less than {self.batch_size + 1} rows. Loading full {entity_type}")
         method_name = ENTITY_CLASS_CONFIG.get(entity_type.lower())
         if not method_name:
             raise ValueError(f"Unknown entity type: {entity_type}")
 
         transformer_method = getattr(self, method_name)
-        self.duplicate_count, self.problematic_records = transformer_method(entity_df)
+        self.duplicate_count, self.problematic_records = transformer_method(entity_df, entity_type)
 
         problematic_record_location = None
         if not self.problematic_records.empty:
@@ -222,68 +233,80 @@ class Transformer:
                 dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/{entity_type}-problematic-{self.context['ds']}",
             )
 
+        table_name = self.loader.get_table_name(entity_type)
+        # table name will always be reliably consistent as long as transformer shares the same interface with load
+
+        manifest_key = self.loader.create_load_manifest(entity_type, table_name)
+
         metadata = {
             "rows_processed": len(entity_df),
+            "manifest_key": manifest_key,
             "duplicates_removed": self.duplicate_count,
             "problematic_rows_excluded": len(self.problematic_records),
             "problematic_data_location": (
                 problematic_record_location
                 if problematic_record_location
                 else "No problematic data points"
-            ),
+            )
         }
+        ti = self.context.get('task_instance')
+        ti.xcom_push(key='metadata', value=metadata)
+
         return metadata
 
 
 
-    def transform_and_load_customer_data(self, customers_df: pd.DataFrame) -> Tuple:
+    def transform_and_load_customer_data(self, df_customers: pd.DataFrame, entity_type: str) -> Tuple:
 
-        customers_df, self.duplicate_count = self.remove_duplicates(customers_df)
-        customer_df = self.standardize_columns(customers_df)
+        df_customers, self.duplicate_count = self.remove_duplicates(df_customers)
+        df_customers = self.standardize_columns(df_customers)
 
-        customers_df["customer_key"] = self.apply_transformation(
-            customers_df["customer_id"], self.generate_key
+        df_customers["customer_key"] = self.apply_transformation(
+            df_customers["customer_id"], self.generate_key
         )
-        customers_df = self.add_key_as_first_column(customer_df, "customer_key")
+        df_customers = self.add_key_as_first_column(df_customers, "customer_key")
 
         # customer_key needs to be in the DataFrame, so customers with bad values are identified
         # downstream after bad values are cleaned/nulled
 
         self.problematic_records = self.dq_checker.identify_problematic_customers(
-            customers_df
+            df_customers
         )
 
-        customers_df["name"] = self.apply_transformation(
-            customers_df["name"], self.cleaner.standardize_name
+        df_customers["name"] = self.apply_transformation(
+            df_customers["name"], self.cleaner.standardize_name
         )
-        customers_df["gender"] = self.apply_transformation(
-            customers_df["gender"], self.cleaner.validate_gender
+        df_customers["gender"] = self.apply_transformation(
+            df_customers["gender"], self.cleaner.validate_gender
         )
-        customers_df["email"] = self.apply_transformation(
-            customers_df["email"], self.cleaner.clean_email
+        df_customers["email"] = self.apply_transformation(
+            df_customers["email"], self.cleaner.clean_email
         )
-        customers_df["zip_code"] = self.apply_transformation(
-            customers_df["address"], self.cleaner.extract_zip_code
+        df_customers["zip_code"] = self.apply_transformation(
+            df_customers["address"], self.cleaner.extract_zip_code
         )
-        customers_df["state_code"] = self.apply_transformation(
-            customers_df["address"], self.cleaner.extract_state_code
+        df_customers["state_code"] = self.apply_transformation(
+            df_customers["address"], self.cleaner.extract_state_code
         )
-        customers_df["state"] = self.apply_transformation(
-            customers_df["state_code"], self.cleaner.generate_state
+        df_customers["state"] = self.apply_transformation(
+            df_customers["state_code"], self.cleaner.generate_state
         )
 
-        # self.loader.load df here
+        self.loader.load_data(df_customers, entity_type)
 
         return self.duplicate_count, self.problematic_records
 
-    def transform_and_load_agents_data(self, df_agents: pd.DataFrame) -> Tuple:
-        """Transforms and loads agent data. Does not require parallelization as
-        agent data is predictably small and static"""
+
+
+    def transform_and_load_agents_data(self, df_agents: pd.DataFrame, entity_type: str) -> Tuple:
+        """Transforms and loads agent data."""
 
         df_agents, self.duplicate_count = self.remove_duplicates(df_agents)
         df_agents = self.standardize_columns(df_agents)
 
-        df_agents["agent_key"] = df_agents["id"].apply(self.generate_key)
+        df_agents["agent_key"] = self.apply_transformation(
+            df_agents["id"], self.generate_key
+        )
         df_agents = self.add_key_as_first_column(df_agents, "agent_key")
 
         # problematic records are only read after generating key
@@ -291,18 +314,22 @@ class Transformer:
             df_agents
         )
 
-        df_agents["name"] = df_agents["name"].apply(self.cleaner.standardize_name)
-        df_agents["experience"] = df_agents["experience"].apply(
-            self.cleaner.validate_experience_level
+        df_agents["name"] = self.apply_transformation(
+            df_agents["name"], self.cleaner.standardize_name
         )
-        df_agents["state"] = df_agents["state"].apply(self.cleaner.validate_state)
+        df_agents["experience"] = self.apply_transformation(
+            df_agents["experience"], self.cleaner.validate_experience_level
+        )
+        df_agents["state"] = self.apply_transformation(
+            df_agents["state"], self.cleaner.validate_state
+        )
 
-        # self.loader.load df here
+        self.loader.load_data(df_agents, entity_type)
+
         return self.duplicate_count, self.problematic_records
 
-    def transform_and_load_web_complaints_data(
-        self, df_complaints: pd.DataFrame
-    ) -> Tuple:
+
+    def transform_and_load_web_complaints_data(self, df_complaints: pd.DataFrame, entity_type: str) -> Tuple:
 
         df_complaints, self.duplicate_count = self.remove_duplicates(df_complaints)
         df_complaints = self.standardize_columns(df_complaints)
@@ -328,12 +355,12 @@ class Transformer:
             df_complaints["resolution_status"], self.cleaner.validate_resolution_status
         )
 
-        # self.loader.load df here
-        return self.duplicate_count, self.problematic_records
+        self.loader.load_data(df_complaints, entity_type)
 
-    def transform_and_load_sm_complaints_data(
-        self, df_complaints: pd.DataFrame
-    ) -> Tuple:
+        return self.duplicate_count, self.problematic_records
+    
+
+    def transform_and_load_sm_complaints_data(self, df_complaints: pd.DataFrame, entity_type: str) -> Tuple:
 
         df_complaints, self.duplicate_count = self.remove_duplicates(df_complaints)
         df_complaints = self.standardize_columns(df_complaints)
@@ -362,10 +389,12 @@ class Transformer:
             df_complaints["media_channel"], self.cleaner.validate_media_channel
         )
 
-        # self.loader.load df here
+        self.loader.load_data(df_complaints, entity_type)
+
         return self.duplicate_count, self.problematic_records
 
-    def transform_and_load_call_logs_data(self, df_call_logs: pd.DataFrame) -> Tuple:
+
+    def transform_and_load_call_logs_data(self, df_call_logs: pd.DataFrame, entity_type: str) -> Tuple:
 
         df_call_logs = df_call_logs.drop(columns=["Unnamed: 0"])
 
@@ -377,6 +406,8 @@ class Transformer:
             + "|"
             + df_call_logs["resolution_status"].astype(str)
         ).apply(lambda x: hashlib.md5(x.encode()).hexdigest()[:16])
+
+        df_call_logs = self.add_key_as_first_column(df_call_logs, "call_log_key")
 
         # problematic records are only read after generating key
         self.problematic_records = self.dq_checker.identify_problematic_call_logs(
@@ -390,5 +421,6 @@ class Transformer:
             df_call_logs["resolution_status"], self.cleaner.validate_resolution_status
         )
 
-        # self.loader.load df here
+        self.loader.load_data(df_call_logs, entity_type)
+
         return self.duplicate_count, self.problematic_records

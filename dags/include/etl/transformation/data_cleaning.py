@@ -1,6 +1,6 @@
 import pandas as pd
 import re
-from dags.include.etl.transformation.configurations.enums import (
+from include.etl.transformation.config.enums import (
     STATE_CODES,
     STATES,
     RESOLUTION_STATUS,
@@ -23,6 +23,8 @@ class Cleaner:
             "COMPLAINT_catego ry": "complaint_category",
             "webformgenerationdate": "web_form_generation_date",
             "resolutionstatus": "resolution_status",
+            "iD": "id",
+            "NamE": "name",
         }
 
         if col in MANUAL_CORRECTIONS:

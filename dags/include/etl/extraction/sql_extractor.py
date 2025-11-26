@@ -108,6 +108,9 @@ class SQLEXtractor:
                 dest_key=dest_key,
             )
             metadata = {**metadata, **conversion_result}
+            ti = self.context["task_instance"]
+            ti.xcom_push(key='metadata', value=metadata)
+
             return metadata
 
         except Exception as e:
