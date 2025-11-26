@@ -97,6 +97,12 @@ class Cleaner:
         return timestamp_str.split()[0]
 
     @staticmethod
+    def nullify_empty_dates(value: str | None) -> str | None:
+        if not value or value == "":
+            return None
+        return value
+
+    @staticmethod
     def generate_state(state_code: str) -> str | None:
         if pd.isna(state_code):
             return None

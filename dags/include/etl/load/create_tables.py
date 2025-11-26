@@ -53,10 +53,11 @@ def create_conformance_tables():
                 """
             CREATE TABLE IF NOT EXISTS conformed_sm_complaints (
                 sm_complaint_key VARCHAR(100) PRIMARY KEY,
-                request_id VARCHAR(100) UNIQUE NOT NULL,
+                complaint_id VARCHAR(100) UNIQUE NOT NULL,
                 customer_id VARCHAR(100) NOT NULL,
                 agent_id VARCHAR(100) NOT NULL,
                 complaint_category VARCHAR(50),
+                media_channel VARCHAR(50),
                 request_date DATE,
                 resolution_date DATE,
                 resolution_status VARCHAR(50),
@@ -75,14 +76,14 @@ def create_conformance_tables():
                 """
             CREATE TABLE IF NOT EXISTS conformed_web_complaints (
                 web_complaint_key VARCHAR(100) PRIMARY KEY,
-                complaint_id VARCHAR(100) UNIQUE NOT NULL,
+                request_id VARCHAR(100) UNIQUE NOT NULL,
                 customer_id VARCHAR(100) NOT NULL,
                 agent_id VARCHAR(100) NOT NULL,
                 complaint_category VARCHAR(100),
                 request_date DATE,
                 resolution_date DATE,
                 resolution_status VARCHAR(50),
-                media_complaint_generation_date DATE,
+                web_form_generation_date DATE,
                 etl_loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (customer_id) REFERENCES conformed_customers(customer_id),
                 FOREIGN KEY (agent_id) REFERENCES conformed_agents(id)

@@ -261,6 +261,7 @@ class Transformer:
         df_customers, self.duplicate_count = self.remove_duplicates(df_customers)
         df_customers = self.standardize_columns(df_customers)
 
+        df_customers = df_customers[df_customers["customer_id"].notna()]
         df_customers["customer_key"] = self.apply_transformation(
             df_customers["customer_id"], self.generate_key
         )
@@ -304,6 +305,7 @@ class Transformer:
         df_agents, self.duplicate_count = self.remove_duplicates(df_agents)
         df_agents = self.standardize_columns(df_agents)
 
+        df_agents = df_agents[df_agents["id"].notna()]
         df_agents["agent_key"] = self.apply_transformation(
             df_agents["id"], self.generate_key
         )
@@ -334,6 +336,9 @@ class Transformer:
 
         df_complaints, self.duplicate_count = self.remove_duplicates(df_complaints)
         df_complaints = self.standardize_columns(df_complaints)
+        df_complaints = df_complaints.drop(columns=["column1"])
+
+        df_complaints = df_complaints[df_complaints["request_id"].notna()]
 
         df_complaints["web_complaint_key"] = (
             df_complaints["request_id"].astype(str)
@@ -355,6 +360,9 @@ class Transformer:
         df_complaints["resolution_status"] = self.apply_transformation(
             df_complaints["resolution_status"], self.cleaner.validate_resolution_status
         )
+        df_complaints["resolution_date"] = self.apply_transformation(
+            df_complaints["resolution_date"], self.cleaner.nullify_empty_dates
+        )
 
         self.loader.load_data(df_complaints, entity_type)
 
@@ -366,6 +374,8 @@ class Transformer:
 
         df_complaints, self.duplicate_count = self.remove_duplicates(df_complaints)
         df_complaints = self.standardize_columns(df_complaints)
+
+        df_complaints = df_complaints[df_complaints["complaint_id"].notna()]
 
         df_complaints["sm_complaint_key"] = (
             df_complaints["complaint_id"].astype(str)
@@ -390,6 +400,9 @@ class Transformer:
         df_complaints["media_channel"] = self.apply_transformation(
             df_complaints["media_channel"], self.cleaner.validate_media_channel
         )
+        df_complaints["resolution_date"] = self.apply_transformation(
+            df_complaints["resolution_date"], self.cleaner.nullify_empty_dates
+        )
 
         self.loader.load_data(df_complaints, entity_type)
 
@@ -404,6 +417,7 @@ class Transformer:
         df_call_logs, self.duplicate_count = self.remove_duplicates(df_call_logs)
         df_call_logs = self.standardize_columns(df_call_logs)
 
+        df_call_logs = df_call_logs[df_call_logs["call_id"].notna()]
         df_call_logs["call_log_key"] = (
             df_call_logs["call_id"].astype(str)
             + "|"
