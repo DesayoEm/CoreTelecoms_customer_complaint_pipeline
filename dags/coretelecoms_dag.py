@@ -69,7 +69,9 @@ def process_complaint_data():
         context = get_current_context()
         transformer = Transformer(context=context)
 
-        return transformer.transform_and_load_entity(metadata["destination"], "customers")
+        return transformer.transform_and_load_entity(
+            metadata["destination"], "customers"
+        )
 
     @task
     def transform_and_load_agents_task(metadata):
@@ -83,37 +85,43 @@ def process_complaint_data():
         context = get_current_context()
         transformer = Transformer(context=context)
 
-        return transformer.transform_and_load_entity(metadata["destination"], "call logs")
+        return transformer.transform_and_load_entity(
+            metadata["destination"], "call logs"
+        )
 
     @task
     def transform_and_load_sm_complaints_task(metadata):
         context = get_current_context()
         transformer = Transformer(context=context)
 
-        return transformer.transform_and_load_entity(metadata["destination"], "sm complaints")
+        return transformer.transform_and_load_entity(
+            metadata["destination"], "sm complaints"
+        )
 
     @task
     def transform_and_load_web_complaints_task(metadata):
         context = get_current_context()
         transformer = Transformer(context=context)
 
-        return transformer.transform_and_load_entity(metadata["destination"], "web complaints")
+        return transformer.transform_and_load_entity(
+            metadata["destination"], "web complaints"
+        )
 
     # raw_customer_data = ingest_customer_data_task()
     raw_agents_data = ingest_agents_data_task()
     raw_call_logs = ingest_call_logs_task()
-    raw_sm_complaints = ingest_sm_complaints_task()
-    raw_web_complaints_data = ingest_web_complaints_data_task()
+    # raw_sm_complaints = ingest_sm_complaints_task()
+    # raw_web_complaints_data = ingest_web_complaints_data_task()
 
     # transform_and_load_customers = transform_and_load_customers_task(raw_customer_data)
-    transform_and_load_agents = transform_and_load_agents_task(raw_agents_data)
+    # transform_and_load_agents = transform_and_load_agents_task(raw_agents_data)
     transform_and_load_call_logs = transform_and_load_call_logs_task(raw_call_logs)
-    transform_and_load_sm_complaints = transform_and_load_sm_complaints_task(
-        raw_sm_complaints
-    )
-    transform_and_load_web_complaints = transform_and_load_web_complaints_task(
-        raw_web_complaints_data
-    )
+    # transform_and_load_sm_complaints = transform_and_load_sm_complaints_task(
+    #     raw_sm_complaints
+    # )
+    # transform_and_load_web_complaints = transform_and_load_web_complaints_task(
+    #     raw_web_complaints_data
+    # )
 
 
 process_complaint_data()

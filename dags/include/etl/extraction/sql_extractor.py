@@ -109,7 +109,7 @@ class SQLEXtractor:
             )
             metadata = {**metadata, **conversion_result}
             ti = self.context["task_instance"]
-            ti.xcom_push(key='metadata', value=metadata)
+            ti.xcom_push(key="metadata", value=metadata)
 
             return metadata
 

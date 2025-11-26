@@ -3,7 +3,7 @@ from airflow.providers.slack.notifications.slack import SlackNotifier
 
 def success_notification(context):
     ti = context["task_instance"]
-    metadata = ti.xcom_pull(task_ids=ti.task_id, key='metadata')
+    metadata = ti.xcom_pull(task_ids=ti.task_id, key="metadata")
 
     details = (
         f"SUCCESS ALERT: {ti.task_id} for CoreTelecoms ingestion for {context['ds']} SUCCEEDED\n\n"

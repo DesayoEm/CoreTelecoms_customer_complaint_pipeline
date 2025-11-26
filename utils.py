@@ -1,11 +1,12 @@
 from sqlalchemy import create_engine, text, inspect
 from dags.include.config import config
 
+
 def list_and_delete_all_tables(conn_string: str, dry_run: bool = True):
     engine = create_engine(conn_string)
 
     inspector = inspect(engine)
-    tables = inspector.get_table_names(schema='public')
+    tables = inspector.get_table_names(schema="public")
 
     print(f"Found {len(tables)} tables:")
     for table in tables:
@@ -16,7 +17,7 @@ def list_and_delete_all_tables(conn_string: str, dry_run: bool = True):
         return
 
     confirm = input("\nAre you sure you want to delete ALL tables? (yes/no): ")
-    if confirm.lower() != 'yes':
+    if confirm.lower() != "yes":
         print("Aborted.")
         return
 
@@ -26,6 +27,7 @@ def list_and_delete_all_tables(conn_string: str, dry_run: bool = True):
             print(f"Dropped {table}")
 
     print(f"Deleted {len(tables)} tables")
+
 
 if __name__ == "__main__":
     list_and_delete_all_tables(config.DEST_DB_CONN_STRING, False)

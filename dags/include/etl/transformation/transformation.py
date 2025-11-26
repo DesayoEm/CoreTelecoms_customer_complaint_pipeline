@@ -91,7 +91,7 @@ class Transformer:
                 "dag_id": self.context["dag"].dag_id,
                 "run_id": self.context["run_id"],
                 "execution_date": self.context["ds"],
-            }
+            },
         }
 
         manifest_key = dest_key.replace(".parquet", "-manifest.json")
@@ -137,13 +137,13 @@ class Transformer:
         else:
             self.transform_and_load_all(entity_data_location, entity_type, entity_df)
 
-
     def transform_and_load_batches(
         self, location: str, entity_type: str, entity_df: pd.DataFrame, total_rows: int
     ):
         from include.etl.transformation.config.entity_class_config import (
             ENTITY_CLASS_CONFIG,
         )
+
         log.info(
             f"{total_rows} rows. {entity_type} will be loaded in "
             f"{round(total_rows / self.batch_size)} batches"
@@ -162,39 +162,35 @@ class Transformer:
             end_idx = min(start_idx + self.batch_size, total_rows)
 
             current_batch = entity_df.iloc[start_idx:end_idx].copy()
-            batch_duplicates, batch_problems = transformer_method(current_batch, entity_type)
+            batch_duplicates, batch_problems = transformer_method(
+                current_batch, entity_type
+            )
 
             # duplicate count and problematic data are accumulated across batch iterations
             self.duplicate_count += batch_duplicates
             self.problematic_records = pd.concat(
                 [self.problematic_records, batch_problems], ignore_index=True
             )
-            
-            self.loader.load_data(current_batch, entity_type)
-            self.loader.save_checkpoint(
-                batch_num=batch_num + 1,
-                rows_loaded=batch_num * self.batch_size
-            )
 
+            self.loader.save_checkpoint(
+                batch_num=batch_num + 1, rows_loaded=batch_num * self.batch_size
+            )
             log.info(
                 f"Completed batch {batch_num + 1}, processed {end_idx}/{total_rows} rows"
             )
 
-
         problematic_record_location = None
-        if (
-            not self.problematic_records.empty
-        ):
+        if not self.problematic_records.empty:
             problematic_record_location = self.upload_problematic_records_to_s3(
                 data=self.problematic_records,
                 source=location,
                 dest_bucket=config.BRONZE_BUCKET,
                 dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/{entity_type}-problematic-{self.context['ds']}",
             )
-        table_name = self.loader.get_table_name(entity_type) 
-        #table name will always be reliablt consistent as long as transformer shares the same interface with load
-        manifest_key = self.loader.create_load_manifest(entity_type,table_name)
-            
+        table_name = self.loader.get_table_name(entity_type)
+        # table name will always be reliablt consistent as long as transformer shares the same interface with load
+        manifest_key = self.loader.create_load_manifest(entity_type, table_name)
+
         metadata = {
             "rows_processed": total_rows,
             "manifest_key": manifest_key,
@@ -204,8 +200,10 @@ class Transformer:
                 problematic_record_location
                 if problematic_record_location
                 else "No problematic data points"
-            )
+            ),
         }
+        ti = self.context.get("task_instance")
+        ti.xcom_push(key="metadata", value=metadata)
 
         return metadata
 
@@ -222,7 +220,9 @@ class Transformer:
             raise ValueError(f"Unknown entity type: {entity_type}")
 
         transformer_method = getattr(self, method_name)
-        self.duplicate_count, self.problematic_records = transformer_method(entity_df, entity_type)
+        self.duplicate_count, self.problematic_records = transformer_method(
+            entity_df, entity_type
+        )
 
         problematic_record_location = None
         if not self.problematic_records.empty:
@@ -247,16 +247,16 @@ class Transformer:
                 problematic_record_location
                 if problematic_record_location
                 else "No problematic data points"
-            )
+            ),
         }
-        ti = self.context.get('task_instance')
-        ti.xcom_push(key='metadata', value=metadata)
+        ti = self.context.get("task_instance")
+        ti.xcom_push(key="metadata", value=metadata)
 
         return metadata
 
-
-
-    def transform_and_load_customer_data(self, df_customers: pd.DataFrame, entity_type: str) -> Tuple:
+    def transform_and_load_customer_data(
+        self, df_customers: pd.DataFrame, entity_type: str
+    ) -> Tuple:
 
         df_customers, self.duplicate_count = self.remove_duplicates(df_customers)
         df_customers = self.standardize_columns(df_customers)
@@ -296,9 +296,9 @@ class Transformer:
 
         return self.duplicate_count, self.problematic_records
 
-
-
-    def transform_and_load_agents_data(self, df_agents: pd.DataFrame, entity_type: str) -> Tuple:
+    def transform_and_load_agents_data(
+        self, df_agents: pd.DataFrame, entity_type: str
+    ) -> Tuple:
         """Transforms and loads agent data."""
 
         df_agents, self.duplicate_count = self.remove_duplicates(df_agents)
@@ -328,8 +328,9 @@ class Transformer:
 
         return self.duplicate_count, self.problematic_records
 
-
-    def transform_and_load_web_complaints_data(self, df_complaints: pd.DataFrame, entity_type: str) -> Tuple:
+    def transform_and_load_web_complaints_data(
+        self, df_complaints: pd.DataFrame, entity_type: str
+    ) -> Tuple:
 
         df_complaints, self.duplicate_count = self.remove_duplicates(df_complaints)
         df_complaints = self.standardize_columns(df_complaints)
@@ -358,9 +359,10 @@ class Transformer:
         self.loader.load_data(df_complaints, entity_type)
 
         return self.duplicate_count, self.problematic_records
-    
 
-    def transform_and_load_sm_complaints_data(self, df_complaints: pd.DataFrame, entity_type: str) -> Tuple:
+    def transform_and_load_sm_complaints_data(
+        self, df_complaints: pd.DataFrame, entity_type: str
+    ) -> Tuple:
 
         df_complaints, self.duplicate_count = self.remove_duplicates(df_complaints)
         df_complaints = self.standardize_columns(df_complaints)
@@ -393,8 +395,9 @@ class Transformer:
 
         return self.duplicate_count, self.problematic_records
 
-
-    def transform_and_load_call_logs_data(self, df_call_logs: pd.DataFrame, entity_type: str) -> Tuple:
+    def transform_and_load_call_logs_data(
+        self, df_call_logs: pd.DataFrame, entity_type: str
+    ) -> Tuple:
 
         df_call_logs = df_call_logs.drop(columns=["Unnamed: 0"])
 

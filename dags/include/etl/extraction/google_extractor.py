@@ -149,7 +149,7 @@ class GoogleSheetsExtractor:
             log.info(f"Successfully copied agents data: {metadata['row_count']} rows")
 
             ti = self.context["task_instance"]
-            ti.xcom_push(key='metadata', value=metadata)
+            ti.xcom_push(key="metadata", value=metadata)
 
             return metadata
 
