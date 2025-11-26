@@ -117,7 +117,7 @@ def process_complaint_data():
     # raw_sm_complaints = ingest_sm_complaints_task()
     # raw_web_complaints_data = ingest_web_complaints_data_task()
 
-    tables =create_conformance_table_task()
+    tables = create_conformance_table_task()
 
     # transform_and_load_customers = transform_and_load_customers_task(raw_customer_data)
     transform_and_load_agents = transform_and_load_agents_task(raw_agents_data)

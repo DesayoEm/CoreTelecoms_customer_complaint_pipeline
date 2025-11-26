@@ -3,13 +3,16 @@ from include.config import config
 
 conn_string = config.SILVER_DB_CONN_STRING
 
+
 def create_conformance_tables():
     engine = create_engine(conn_string)
 
     with engine.begin() as conn:
 
         # CUSTOMERS
-        conn.execute(text("""
+        conn.execute(
+            text(
+                """
             CREATE TABLE IF NOT EXISTS conformed_customers (
                 customer_key VARCHAR(100) PRIMARY KEY,
                 customer_id VARCHAR(100) UNIQUE NOT NULL,
@@ -24,10 +27,14 @@ def create_conformance_tables():
                 state VARCHAR(50),
                 etl_loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-        """))
+        """
+            )
+        )
 
         # AGENTS
-        conn.execute(text("""
+        conn.execute(
+            text(
+                """
             CREATE TABLE IF NOT EXISTS conformed_agents (
                 agent_key VARCHAR(100) PRIMARY KEY,
                 id VARCHAR(50) UNIQUE NOT NULL,
@@ -36,10 +43,14 @@ def create_conformance_tables():
                 state VARCHAR(50),
                 etl_loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-        """))
+        """
+            )
+        )
 
         # SM COMPLAINTS
-        conn.execute(text("""
+        conn.execute(
+            text(
+                """
             CREATE TABLE IF NOT EXISTS conformed_sm_complaints (
                 sm_complaint_key VARCHAR(100) PRIMARY KEY,
                 request_id VARCHAR(100) UNIQUE NOT NULL,
@@ -54,10 +65,14 @@ def create_conformance_tables():
                 FOREIGN KEY (customer_id) REFERENCES conformed_customers(customer_id),
                 FOREIGN KEY (agent_id) REFERENCES conformed_agents(id)
             );
-        """))
+        """
+            )
+        )
 
         # WEB COMPLAINTS
-        conn.execute(text("""
+        conn.execute(
+            text(
+                """
             CREATE TABLE IF NOT EXISTS conformed_web_complaints (
                 web_complaint_key VARCHAR(100) PRIMARY KEY,
                 complaint_id VARCHAR(100) UNIQUE NOT NULL,
@@ -72,10 +87,14 @@ def create_conformance_tables():
                 FOREIGN KEY (customer_id) REFERENCES conformed_customers(customer_id),
                 FOREIGN KEY (agent_id) REFERENCES conformed_agents(id)
             );
-        """))
+        """
+            )
+        )
 
         # CALL LOGS
-        conn.execute(text("""
+        conn.execute(
+            text(
+                """
             CREATE TABLE IF NOT EXISTS conformed_call_logs (
                 call_log_key VARCHAR(100) PRIMARY KEY,
                 call_id VARCHAR(100) UNIQUE NOT NULL,
@@ -91,4 +110,6 @@ def create_conformance_tables():
                 FOREIGN KEY (customer_id) REFERENCES conformed_customers(customer_id),
                 FOREIGN KEY (agent_id) REFERENCES conformed_agents(id)
             );
-        """))
+        """
+            )
+        )
