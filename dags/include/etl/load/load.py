@@ -59,8 +59,7 @@ class Loader:
 
         engine = create_engine(self.conn_string)
         with engine.begin() as conn:
-            # staging tables must be cleared before each load
-            conn.execute(text(f"TRUNCATE TABLE {staging_table} CASCADE"))
+
             data.to_sql(
                 staging_table,
                 conn,
@@ -72,7 +71,6 @@ class Loader:
             if "complaints" in entity_type:
                 self.load_complaints_with_fk_validation(conn, staging_table, table)
             elif "customer" in entity_type:
-                log.info("CCCCCCCCUUUUUUSSSSSSSTTTTTTOMEEEERRR")
                 self.load_customers(conn, staging_table, table)
             elif "agents" in entity_type:
                 self.load_agents(conn, staging_table, table)
@@ -131,7 +129,6 @@ class Loader:
         log.info(f"Loaded {rows_inserted} valid records to {target_table}")
 
     def load_customers(self, conn, staging_table, target_table):
-        log.info("CCCCCCCCUUUUUUSSSSSSSTTTTTTOMEEEERRR LOOOAADDDDIINGGGGG")
         result = conn.execute(
             text(
                 f"""

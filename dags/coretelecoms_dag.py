@@ -6,7 +6,8 @@ from include.etl.extraction.google_extractor import GoogleSheetsExtractor
 from include.etl.extraction.sql_extractor import SQLEXtractor
 from include.etl.transformation.transformation import Transformer
 from include.notifications.success_notification import success_notification
-from include.etl.load.create_tables import create_all_tables
+from dags.include.etl.load.ddl_scripts.create_tables import create_all_tables
+from dags.include.etl.load.ddl_scripts.truncate_staging import truncate_staging_tables
 
 
 from airflow.utils.log.logging_mixin import LoggingMixin
@@ -70,6 +71,10 @@ def process_complaint_data():
         return create_all_tables()
 
     @task
+    def truncate_staging_tables_task():
+        return truncate_staging_tables()
+
+    @task
     def transform_and_load_customers_task(metadata):
         context = get_current_context()
         transformer = Transformer(context=context)
@@ -119,11 +124,12 @@ def process_complaint_data():
     raw_web_complaints_data = ingest_web_complaints_data_task()
 
     tables = create_all_tables_task()
+    clear_staging = truncate_staging_tables_task()
 
     transform_and_load_customers = transform_and_load_customers_task(raw_customer_data)
     transform_and_load_agents = transform_and_load_agents_task(raw_agents_data)
 
-    tables >> [transform_and_load_customers, transform_and_load_agents]
+    tables >> clear_staging >> [transform_and_load_customers, transform_and_load_agents]
 
     transform_and_load_call_logs = transform_and_load_call_logs_task(raw_call_logs)
     transform_and_load_sm_complaints = transform_and_load_sm_complaints_task(
