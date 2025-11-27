@@ -1,13 +1,10 @@
 from dataclasses import dataclass
-from typing import Dict, Tuple
-import io
+from typing import Dict
 import json
 import pandas as pd
 from sqlalchemy import create_engine, text
 from datetime import datetime
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-
-
 from include.config import config
 from airflow.utils.log.logging_mixin import LoggingMixin
 
@@ -71,49 +68,12 @@ class Loader:
                 method="multi",
                 chunksize=10000,
             )
-            if entity_type == "customers":
-                result = conn.execute(
-                    text(
-                        f"""
-                    INSERT INTO {table}
-                    SELECT * FROM {staging_table}
-                    ON CONFLICT (customer_id)
-                    DO UPDATE SET
-                        name = EXCLUDED.name,
-                        date_of_birth = EXCLUDED.date_of_birth,
-                        signup_date = EXCLUDED.signup_date,
-                        email = EXCLUDED.email,
-                        full_address = EXCLUDED.full_address,
-                        zip_code = EXCLUDED.zip_code,
-                        state_code = EXCLUDED.state_code,
-                        state = EXCLUDED.state,
-                        last_updated_at = CURRENT_TIMESTAMP
-                    """
-                    )
-                )
-
-            elif "complaints" in entity_type:
+            if "complaints" in entity_type:
                 self.load_complaints_with_fk_validation(conn, staging_table, table)
-
+            elif entity_type == "customers":
+                self.load_customers(conn, staging_table, table)
             else:  # agents
-                result = conn.execute(
-                    text(
-                        f"""
-                    INSERT INTO {table}
-                    SELECT * FROM {staging_table}
-                    ON CONFLICT (id)
-                    DO UPDATE SET
-                        experience = EXCLUDED.experience,
-                        last_updated_at = CURRENT_TIMESTAMP
-                        
-                        """
-                    )
-                )
-
-        rows_affected = result.rowcount
-
-        self.rows_loaded += rows_affected
-        log.info(f"Loaded/updated {rows_affected} rows to {table}")
+                self.load_agents(conn, staging_table, table)
 
     def load_complaints_with_fk_validation(self, conn, staging_table, target_table):
         result = conn.execute(
@@ -161,26 +121,51 @@ class Loader:
         """
             )
         ).rowcount
+        rows_affected = result.rowcount
 
+        self.rows_loaded += rows_affected
         log.info(f"Loaded {rows_inserted} valid records to {target_table}")
 
-    def create_quarantine_table(self):
-        engine = create_engine(self.conn_string)
-        with engine.begin() as conn:
-            conn.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS data_quality_quarantine (
-                        id SERIAL PRIMARY KEY,
-                        table_name VARCHAR(100),
-                        issue_type VARCHAR(50),
-                        record_data JSONB,
-                        error_message TEXT,
-                        quarantined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
+    def load_customers(self, conn, staging_table, target_table):
+        result = conn.execute(
+            text(
+                f"""
+                INSERT INTO {target_table}
+                SELECT * FROM {staging_table}
+                ON CONFLICT (customer_id)
+                DO UPDATE SET
+                    name = EXCLUDED.name,
+                    date_of_birth = EXCLUDED.date_of_birth,
+                    signup_date = EXCLUDED.signup_date,
+                    email = EXCLUDED.email,
+                    full_address = EXCLUDED.full_address,
+                    zip_code = EXCLUDED.zip_code,
+                    state_code = EXCLUDED.state_code,
+                    state = EXCLUDED.state,
+                    last_updated_at = CURRENT_TIMESTAMP
                 """
-                )
             )
+        )
+        rows_affected = result.rowcount
+        self.rows_loaded += rows_affected
+        log.info(f"Loaded/updated {rows_affected} rows to {target_table}")
+
+    def load_agents(self, conn, staging_table, target_table):
+        result = conn.execute(
+            text(
+                f"""
+                INSERT INTO {target_table}
+                SELECT * FROM {staging_table}
+                ON CONFLICT (id)
+                DO UPDATE SET
+                    experience = EXCLUDED.experience,
+                    last_updated_at = CURRENT_TIMESTAMP
+                """
+            )
+        )
+        rows_affected = result.rowcount
+        self.rows_loaded += rows_affected
+        log.info(f"Loaded/updated {rows_affected} rows to {target_table}")
 
     def save_to_quarantine(self, records, table_name, issue_type):
         engine = create_engine(self.conn_string)
@@ -199,6 +184,12 @@ class Loader:
                         "record_data": json.dumps(dict(record)),
                     },
                 )
+
+    @staticmethod
+    def get_table_name(entity_type: str) -> str:
+        """Generate table name from entity type"""
+        entity_type = entity_type.replace(" ", "_")
+        return f"conformed_{entity_type}"
 
     def create_load_manifest(self, entity_type: str, table_name: str) -> str:
 
@@ -238,62 +229,3 @@ class Loader:
 
         ti.xcom_push(key="checkpoint", value=checkpoint)
         log.info(f"Checkpoint saved: batch {batch_num}")
-
-    @staticmethod
-    def get_table_name(entity_type: str) -> str:
-        """Generate table name from entity type"""
-        entity_type = entity_type.replace(" ", "_")
-        return f"conformed_{entity_type}"
-
-    def upload_to_s3(
-        self, data: pd.DataFrame, source: str, dest_bucket: str, dest_key: str
-    ) -> Tuple:
-        buffer = io.BytesIO()
-        row_count = len(data)
-
-        data.to_parquet(buffer, engine="pyarrow", index=False, compression="snappy")
-        file_size_bytes = buffer.tell()
-        buffer.seek(0)
-
-        dest_key = f"{dest_key}.parquet"
-        self.s3_dest_hook.load_file_obj(
-            file_obj=buffer, key=dest_key, bucket_name=dest_bucket, replace=True
-        )
-
-        location = f"s3://{dest_bucket}/{dest_key}"
-
-        return location, file_size_bytes, source, row_count
-
-    def upload_problematic_records(self, data: pd.DataFrame, entity_type: str) -> str:
-        """Upload problematic records to S3 with manifest."""
-        if data.empty:
-            return None
-
-        dest_key = (
-            f"{config.PROBLEMATIC_DATA_PREFIX}/{entity_type}_{self.context['ds']}"
-        )
-
-        location, file_size, _, row_count = self.upload_to_s3(
-            data=data, dest_bucket=config.BRONZE_BUCKET, dest_key=dest_key
-        )
-
-        manifest = {
-            "data_file": dest_key,
-            "created_at": datetime.now().isoformat(),
-            "metrics": {"row_count": row_count, "file_size_bytes": file_size},
-            "lineage": {
-                "dag_id": self.context["dag"].dag_id,
-                "run_id": self.context["run_id"],
-                "execution_date": self.context["ds"],
-            },
-        }
-
-        manifest_key = f"{dest_key}_manifest.json"
-        self.s3_dest_hook.load_string(
-            string_data=json.dumps(manifest, indent=2),
-            key=manifest_key,
-            bucket_name=config.BRONZE_BUCKET,
-        )
-
-        log.info(f"Uploaded {row_count} problematic records to {location}")
-        return location
