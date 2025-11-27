@@ -29,5 +29,15 @@ def list_and_delete_all_tables(conn_string: str, dry_run: bool = True):
     print(f"Deleted {len(tables)} tables")
 
 
-if __name__ == "__main__":
-    list_and_delete_all_tables(config.SILVER_DB_CONN_STRING, False)
+engine = create_engine(config.SILVER_DB_CONN_STRING)
+
+with engine.begin() as conn:
+    result = conn.execute(text("SELECT * FROM conformed_customers LIMIT 5"))
+    rows = result.fetchall()
+
+for row in rows:
+    print(row)
+
+
+# if __name__ == "__main__":
+#     list_and_delete_all_tables(config.SILVER_DB_CONN_STRING, False)

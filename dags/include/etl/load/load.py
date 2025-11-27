@@ -58,22 +58,26 @@ class Loader:
         staging_table = f"staging_{table}"
 
         engine = create_engine(self.conn_string)
-
         with engine.begin() as conn:
+            # staging tables must be cleared before each load
+            conn.execute(text(f"TRUNCATE TABLE {staging_table} CASCADE"))
             data.to_sql(
                 staging_table,
                 conn,
-                if_exists="replace",
+                if_exists="append",
                 index=False,
                 method="multi",
                 chunksize=10000,
             )
             if "complaints" in entity_type:
                 self.load_complaints_with_fk_validation(conn, staging_table, table)
-            elif entity_type == "customers":
+            elif "customer" in entity_type:
+                log.info("CCCCCCCCUUUUUUSSSSSSSTTTTTTOMEEEERRR")
                 self.load_customers(conn, staging_table, table)
-            else:  # agents
+            elif "agents" in entity_type:
                 self.load_agents(conn, staging_table, table)
+            else:
+                raise ValueError(f"Unknown entity type: {entity_type}")
 
     def load_complaints_with_fk_validation(self, conn, staging_table, target_table):
         result = conn.execute(
@@ -127,6 +131,7 @@ class Loader:
         log.info(f"Loaded {rows_inserted} valid records to {target_table}")
 
     def load_customers(self, conn, staging_table, target_table):
+        log.info("CCCCCCCCUUUUUUSSSSSSSTTTTTTOMEEEERRR LOOOAADDDDIINGGGGG")
         result = conn.execute(
             text(
                 f"""
@@ -135,10 +140,10 @@ class Loader:
                 ON CONFLICT (customer_id)
                 DO UPDATE SET
                     name = EXCLUDED.name,
-                    date_of_birth = EXCLUDED.date_of_birth,
+                    gender = EXCLUDED.gender,
                     signup_date = EXCLUDED.signup_date,
                     email = EXCLUDED.email,
-                    full_address = EXCLUDED.full_address,
+                    address = EXCLUDED.address,
                     zip_code = EXCLUDED.zip_code,
                     state_code = EXCLUDED.state_code,
                     state = EXCLUDED.state,

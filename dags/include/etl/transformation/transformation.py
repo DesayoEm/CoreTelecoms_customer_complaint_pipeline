@@ -295,7 +295,6 @@ class Transformer:
         )
 
         self.loader.load_data(df_customers, entity_type)
-
         return self.duplicate_count, self.problematic_records
 
     def transform_and_load_agents_data(
