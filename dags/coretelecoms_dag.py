@@ -5,8 +5,9 @@ from include.etl.extraction.s3_extractor import S3Extractor
 from include.etl.extraction.google_extractor import GoogleSheetsExtractor
 from include.etl.extraction.sql_extractor import SQLEXtractor
 from include.etl.transformation.transformation import Transformer
-from include.notifications.success_notification import success_notification
+from include.notifications.notifications import success_notification
 from include.etl.load.ddl_scripts.create_tables import create_all_tables
+from include.etl.load.cleanup import clear_all_checkpoints
 from include.etl.load.ddl_scripts.truncate_staging import truncate_staging_tables
 
 
@@ -117,6 +118,12 @@ def process_complaint_data():
             metadata["destination"], "web complaints"
         )
 
+    @task(trigger_rule="all_success")
+    def cleanup_checkpoints_task():
+        """Clear all checkpoints after successful DAG run."""
+        context = get_current_context()
+        return clear_all_checkpoints(context=context)
+
     raw_customer_data = ingest_customer_data_task()
     raw_agents_data = ingest_agents_data_task()
     raw_call_logs = ingest_call_logs_task()
@@ -130,7 +137,6 @@ def process_complaint_data():
     transform_and_load_agents = transform_and_load_agents_task(raw_agents_data)
 
     tables >> clear_staging >> [transform_and_load_customers, transform_and_load_agents]
-    # tables >> clear_staging >> transform_and_load_agents
 
     transform_and_load_call_logs = transform_and_load_call_logs_task(raw_call_logs)
     transform_and_load_sm_complaints = transform_and_load_sm_complaints_task(
@@ -149,6 +155,9 @@ def process_complaint_data():
     for upstream in [transform_and_load_customers, transform_and_load_agents]:
         for downstream in downstream_tasks:
             upstream >> downstream
+
+    cleanup = cleanup_checkpoints_task()
+    downstream_tasks >> cleanup
 
 
 process_complaint_data()

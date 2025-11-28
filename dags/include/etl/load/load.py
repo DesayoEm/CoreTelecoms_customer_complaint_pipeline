@@ -74,7 +74,7 @@ class LoadStateHandler:
             f"Checkpoint saved - Key: {checkpoint_key}, Batch: {batch_num}, Rows: {rows_loaded}"
         )
 
-    def clear_checkpoint(self, context: Dict):
+    def clear_checkpoints(self, context: Dict):
         """
         Manually clear checkpoint
         """

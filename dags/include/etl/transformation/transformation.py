@@ -13,6 +13,7 @@ from include.etl.transformation.data_quality import DataQualityChecker
 from include.etl.load.load import Loader
 from include.etl.load.load import LoadStateHandler
 from include.exceptions.exceptions import DataLoadError
+from include.notifications.notifications import notify_batch_already_complete
 
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.utils.log.logging_mixin import LoggingMixin
@@ -134,25 +135,21 @@ class Transformer:
         total_rows = len(entity_df)
         # load in batches if more than 100k rows
         if total_rows > self.batch_size:
-            ti = self.context.get("task_instance")
-            task_instance = ti.task_id
             self.transform_and_load_batches(
-                entity_data_location, entity_type, entity_df, total_rows, task_instance
+                entity_data_location, entity_type, entity_df, total_rows
             )
         else:
             self.transform_and_load_all(entity_data_location, entity_type, entity_df)
 
     def transform_and_load_batches(
-        self,
-        location: str,
-        entity_type: str,
-        entity_df: pd.DataFrame,
-        total_rows: int,
-        task_instance: str,
+        self, location: str, entity_type: str, entity_df: pd.DataFrame, total_rows: int
     ):
         from include.etl.transformation.config.entity_class_config import (
             ENTITY_CLASS_CONFIG,
         )
+
+        ti = self.context["task_instance"]
+        task_id = ti.task_id
 
         batches_to_run = (total_rows + self.batch_size - 1) // self.batch_size
         start_batch = self.load_state_handler.determine_starting_point()
@@ -160,7 +157,9 @@ class Transformer:
         if start_batch == batches_to_run:
             # if load has completed in a previous run
             log.info(f"{start_batch} batches completed. No more runs required")
-            return "WWWWWWWWWWWWWWW"
+            notify_batch_already_complete(
+                self.context, start_batch, batches_to_run, task_id
+            )
 
         log.info(
             f"{total_rows} {entity_type} will be loaded in " f"{batches_to_run} batches"
