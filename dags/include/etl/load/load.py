@@ -1,65 +1,91 @@
-from dataclasses import dataclass
 from typing import Dict
 import json
 import pandas as pd
 from sqlalchemy import create_engine, text
 from datetime import datetime
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.models import Variable
 from include.config import config
 from airflow.utils.log.logging_mixin import LoggingMixin
 
 log = LoggingMixin().log
 
 
-class StateLoader:
+class LoadStateHandler:
     """Loads checkpoint state from Airflow XCom."""
 
-    @staticmethod
-    def load_starting_point_from_context(context: Dict) -> int:
-        """Load checkpoint on retry, otherwise start fresh."""
-        current_execution_date = context.get("ds")
-        ti = context.get("task_instance")
-        dag_run = context.get("dag_run")
+    def __init__(self, context: Dict):
+        self.context = context
 
-        log.info(f"Task: {ti.task_id}, Execution Date: {current_execution_date}")
-        log.info(f"Try number: {ti.try_number}, Max tries: {ti.max_tries}")
-
-        checkpoints = ti.xcom_pull(
-            task_ids=ti.task_id, key="checkpoint", include_prior_dates=True
-        )
-
-        log.info(f"Raw checkpoints: {checkpoints}")
-
-        if not checkpoints:
-            log.info("No previous states found in XCom, starting fresh")
+    def determine_starting_point(self) -> int:
+        """
+        Load checkpoint from Airflow Variable on task retry.
+        Returns last completed batch number, or 0 if no checkpoint exists.
+        """
+        ti = self.context.get("task_instance")
+        if ti.try_number == 1:  # don't access checkpoint on first run
+            log.info("First run. Starting fresh load")
             return 0
 
-        checkpoint_list = (
-            checkpoints if isinstance(checkpoints, list) else [checkpoints]
+        current_execution_date = self.context.get("ds")
+        checkpoint_key = f"{ti.task_id}_{current_execution_date}"
+        try:
+            checkpoint_json = Variable.get(checkpoint_key)
+            checkpoint = json.loads(checkpoint_json)
+            batch_num = checkpoint.get("last_completed_batch", 0)
+            rows = checkpoint.get("rows_loaded", "unknown")
+
+            log.info(
+                f"Checkpoint loaded - Key: {checkpoint_key}, Batch: {batch_num}, Rows: {rows}"
+            )
+            log.info(f"  Resuming from batch {batch_num + 1}")
+            return batch_num
+
+        except KeyError:
+            log.info(f"No checkpoint found for key: {checkpoint_key}")
+            log.info(f"  Starting fresh from batch 0")
+            return 0
+
+        except json.JSONDecodeError as e:
+            log.error(
+                f"Failed to parse checkpoint JSON: {e}\n"
+                f"JSON DATA\n\n"
+                f"{checkpoint_json}"
+            )
+
+            log.info(f"Starting fresh from batch 0")
+            return 0
+
+    def save_checkpoint(self, batch_num: int, rows_loaded: int) -> None:
+        """
+        Save checkpoint to Airflow Variable for retry recovery.
+        Overwrites previous run for same task_id + execution_date.
+        """
+        ti = self.context.get("task_instance")
+        current_execution_date = self.context.get("ds")
+        checkpoint_key = f"{ti.task_id}_{current_execution_date}"
+        checkpoint_value = {
+            "last_completed_batch": batch_num,
+            "rows_loaded": rows_loaded,
+            "date": current_execution_date,
+        }
+        Variable.set(checkpoint_key, json.dumps(checkpoint_value))
+        log.info(
+            f"Checkpoint saved - Key: {checkpoint_key}, Batch: {batch_num}, Rows: {rows_loaded}"
         )
 
-        checkpoint_list.sort(key=lambda x: x.get("date", ""), reverse=True)
+    def clear_checkpoint(self, context: Dict):
+        """
+        Manually clear checkpoint
+        """
+        ti = context["task_instance"]
+        checkpoint_key = f"{ti.task_id}_{context['ds']}"
 
-        for checkpoint in checkpoint_list:
-            if checkpoint.get("date") == current_execution_date:
-                last_completed_batch = checkpoint.get("last_completed_batch")
-                if last_completed_batch:
-                    log.info(
-                        f"Found checkpoint for current date {current_execution_date}: batch {last_completed_batch}"
-                    )
-                    return last_completed_batch
-
-        if ti.try_number > 1 and checkpoint_list:
-            latest_checkpoint = checkpoint_list[0]
-            last_completed_batch = latest_checkpoint.get("last_completed_batch")
-            if last_completed_batch is not None:
-                log.info(
-                    f"Retry detected - using most recent checkpoint from {latest_checkpoint.get('date')}: batch {last_completed_batch}"
-                )
-                return last_completed_batch
-
-        log.info("No valid checkpoint found for this run, starting fresh")
-        return 0
+        try:
+            Variable.delete(checkpoint_key)
+            log.info(f"✓ Checkpoint cleared - Key: {checkpoint_key}")
+        except KeyError:
+            log.info(f"○ No checkpoint to clear for key: {checkpoint_key}")
 
 
 class Loader:
@@ -67,36 +93,40 @@ class Loader:
 
     def __init__(self, context: Dict, s3_dest_hook=None):
         self.context = context
-        self.conn_string = config.SILVER_DB_CONN_STRING
-        self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
-        self.last_completed_batch = StateLoader.load_starting_point_from_context(
-            context
+        self.engine = create_engine(
+            config.SILVER_DB_CONN_STRING,
+            isolation_level="AUTOCOMMIT",
+            pool_pre_ping=True,
         )
+        self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
         self.rows_loaded: int = 0
 
     def load_data(self, data: pd.DataFrame, entity_type: str):
         table = self.get_table_name(entity_type)
         staging_table = f"staging_{table}"
+        try:
+            with self.engine.begin() as conn:
+                conn.execute(text(f"TRUNCATE TABLE {staging_table}"))
+                log.info(f"Cleared {staging_table}")
 
-        engine = create_engine(self.conn_string)
-        with engine.begin() as conn:
-
-            data.to_sql(
-                staging_table,
-                conn,
-                if_exists="append",
-                index=False,
-                method="multi",
-                chunksize=10000,
-            )
-            if "complaints" in entity_type:
-                self.load_complaints_with_fk_validation(conn, staging_table, table)
-            elif "customer" in entity_type:
-                self.load_customers(conn, staging_table, table)
-            elif "agents" in entity_type:
-                self.load_agents(conn, staging_table, table)
-            else:
-                raise ValueError(f"Unknown entity type: {entity_type}")
+                data.to_sql(
+                    staging_table,
+                    conn,
+                    if_exists="append",
+                    index=False,
+                    method="multi",
+                    chunksize=10000,
+                )
+                if "complaints" in entity_type:
+                    self.load_complaints_with_fk_validation(conn, staging_table, table)
+                elif "customer" in entity_type:
+                    self.load_customers(conn, staging_table, table)
+                elif "agents" in entity_type:
+                    self.load_agents(conn, staging_table, table)
+                else:
+                    raise ValueError(f"Unknown entity type: {entity_type}")
+        finally:
+            self.engine.dispose()
 
     def load_complaints_with_fk_validation(self, conn, staging_table, target_table):
         result = conn.execute(
@@ -191,8 +221,7 @@ class Loader:
         log.info(f"Loaded/updated {rows_affected} rows to {target_table}")
 
     def save_to_quarantine(self, records, table_name, issue_type):
-        engine = create_engine(self.conn_string)
-        with engine.begin() as conn:
+        with self.engine.begin() as conn:
             for record in records:
                 conn.execute(
                     text(
@@ -237,18 +266,3 @@ class Loader:
         )
 
         return manifest_key
-
-    def save_checkpoint(self, batch_num: int, rows_loaded: int) -> None:
-        """Save checkpoint to XCom for retry recovery."""
-        ti = self.context.get("task_instance")
-        if not ti:
-            return
-
-        current_execution_date = self.context.get("ds")
-        checkpoint = {
-            "last_completed_batch": batch_num,
-            "rows_loaded": rows_loaded,
-            "date": current_execution_date,
-        }
-        ti.xcom_push(key="checkpoint", value=checkpoint)
-        log.info(f"Checkpoint saved: batch {batch_num}")

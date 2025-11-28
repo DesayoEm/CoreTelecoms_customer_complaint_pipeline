@@ -1,9 +1,11 @@
 from sqlalchemy import create_engine, text, inspect
 from dags.include.config import config
 
+conn_string = config.SILVER_DB_CONN_STRING
+engine = create_engine(config.SILVER_DB_CONN_STRING, isolation_level="AUTOCOMMIT")
 
-def list_and_delete_all_tables(conn_string: str, dry_run: bool = True):
-    engine = create_engine(conn_string)
+
+def list_and_delete_all_tables(dry_run: bool = True):
     inspector = inspect(engine)
     tables = inspector.get_table_names(schema="public")
 
@@ -35,8 +37,6 @@ def list_and_delete_all_tables(conn_string: str, dry_run: bool = True):
 
 
 def truncate_staging_tables():
-    engine = create_engine(config.SILVER_DB_CONN_STRING)
-
     tables = [
         "staging_conformed_sm_complaints",
         "staging_conformed_web_complaints",
@@ -49,17 +49,26 @@ def truncate_staging_tables():
 
     with engine.begin() as conn:
         conn.execute(text(f"TRUNCATE TABLE {table_list} CASCADE"))
+    engine.dispose()
+
+
+if __name__ == "__main__":
+    list_and_delete_all_tables(False)
 
 
 # if __name__ == "__main__":
-#     list_and_delete_all_tables(config.SILVER_DB_CONN_STRING, False)
-# #
+#     truncate_staging_tables()
+
+
+#
 # with engine.begin() as conn:
 #     result = conn.execute(text("SELECT COUNT(*) FROM staging_conformed_customers"))
 #     rows = result.fetchall()
-#
+# engine.dispose()
+# #
 # for row in rows:
 #     print(row)
 
-if __name__ == "__main__":
-    truncate_staging_tables()
+
+#
+# engine = create_engine(conn_string, isolation_level="AUTOCOMMIT")

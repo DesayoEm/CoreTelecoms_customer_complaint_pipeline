@@ -1,5 +1,4 @@
 from typing import Dict, Tuple, Any
-from sqlalchemy import text
 import io
 import json
 from datetime import datetime
@@ -12,6 +11,7 @@ from include.config import config
 from include.etl.transformation.data_cleaning import Cleaner
 from include.etl.transformation.data_quality import DataQualityChecker
 from include.etl.load.load import Loader
+from include.etl.load.load import LoadStateHandler
 from include.exceptions.exceptions import DataLoadError
 
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
@@ -27,8 +27,9 @@ class Transformer:
         self.cleaner = Cleaner()
         self.dq_checker = DataQualityChecker(self.cleaner)
         self.loader = Loader(self.context, self.s3_dest_hook)
+        self.load_state_handler = LoadStateHandler(self.context)
         self.problematic_records: pd.DataFrame = pd.DataFrame()
-        self.batch_size: int = 10
+        self.batch_size: int = 100000
         self.duplicate_count: int = 0
 
     @staticmethod
@@ -154,14 +155,9 @@ class Transformer:
         )
 
         batches_to_run = (total_rows + self.batch_size - 1) // self.batch_size
+        start_batch = self.load_state_handler.determine_starting_point()
 
-        ti = self.context.get("task_instance")
-        start_batch = self.loader.last_completed_batch
-
-        log.info(f"nnnnnnnnnnnnnnnnnnnnnnnnnnn{start_batch}")
-        log.info(f"nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn{batches_to_run}")
-
-        if start_batch == batches_to_run and ti.try_number > 1:
+        if start_batch == batches_to_run:
             # if load has completed in a previous run
             log.info(f"{start_batch} batches completed. No more runs required")
             return "WWWWWWWWWWWWWWW"
@@ -190,7 +186,9 @@ class Transformer:
                 [self.problematic_records, batch_problems], ignore_index=True
             )
 
-            self.loader.save_checkpoint(batch_num=batch_num + 1, rows_loaded=end_idx)
+            self.load_state_handler.save_checkpoint(
+                batch_num=batch_num + 1, rows_loaded=end_idx
+            )
             log.info(
                 f"Completed batch {batch_num + 1}, processed {end_idx}/{total_rows} rows"
             )
