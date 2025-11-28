@@ -149,37 +149,36 @@ class Transformer:
             f"{total_rows} rows. {entity_type} will be loaded in "
             f"{round(total_rows / self.batch_size)} batches"
         )
-        try:
 
-            method_name = ENTITY_CLASS_CONFIG.get(entity_type.lower())
-            if not method_name:
-                raise ValueError(f"Unknown entity type: {entity_type}")
+        method_name = ENTITY_CLASS_CONFIG.get(entity_type.lower())
+        if not method_name:
+            raise ValueError(f"Unknown entity type: {entity_type}")
 
-            transformer_method = getattr(self, method_name)
+        transformer_method = getattr(self, method_name)
 
-            start_batch = self.loader.state.last_completed_batch
+        start_batch = self.loader.state.last_completed_batch
 
-            for batch_num in range(start_batch, (total_rows // self.batch_size) + 1):
-                start_idx = batch_num * self.batch_size
-                end_idx = min(start_idx + self.batch_size, total_rows)
+        for batch_num in range(start_batch, (total_rows // self.batch_size) + 1):
+            start_idx = batch_num * self.batch_size
+            end_idx = min(start_idx + self.batch_size, total_rows)
 
-                current_batch = entity_df.iloc[start_idx:end_idx].copy()
-                batch_duplicates, batch_problems = transformer_method(
-                    current_batch, entity_type
-                )
+            current_batch = entity_df.iloc[start_idx:end_idx].copy()
+            batch_duplicates, batch_problems = transformer_method(
+                current_batch, entity_type
+            )
 
-                # duplicate count and problematic data are accumulated across batch iterations
-                self.duplicate_count += batch_duplicates
-                self.problematic_records = pd.concat(
-                    [self.problematic_records, batch_problems], ignore_index=True
-                )
+            # duplicate count and problematic data are accumulated across batch iterations
+            self.duplicate_count += batch_duplicates
+            self.problematic_records = pd.concat(
+                [self.problematic_records, batch_problems], ignore_index=True
+            )
 
-                self.loader.save_checkpoint(
-                    batch_num=batch_num + 1, rows_loaded=batch_num * self.batch_size
-                )
-                log.info(
-                    f"Completed batch {batch_num + 1}, processed {end_idx}/{total_rows} rows"
-                )
+            self.loader.save_checkpoint(
+                batch_num=batch_num + 1, rows_loaded=batch_num * self.batch_size
+            )
+            log.info(
+                f"Completed batch {batch_num + 1}, processed {end_idx}/{total_rows} rows"
+            )
 
             problematic_record_location = None
             if not self.problematic_records.empty:
@@ -209,9 +208,6 @@ class Transformer:
 
             return metadata
 
-        except Exception as e:
-            raise DataLoadError(error=e, entity_type=entity_type)
-
     def transform_and_load_all(
         self, location: str, entity_type: str, entity_df: pd.DataFrame
     ) -> Dict[str, Any]:
@@ -220,24 +216,24 @@ class Transformer:
         )  # scoped import to avoid circular imports
 
         log.info(f"Less than {self.batch_size + 1} rows. Loading full {entity_type}")
-        try:
-            method_name = ENTITY_CLASS_CONFIG.get(entity_type.lower())
-            if not method_name:
-                raise ValueError(f"Unknown entity type: {entity_type}")
 
-            transformer_method = getattr(self, method_name)
-            self.duplicate_count, self.problematic_records = transformer_method(
-                entity_df, entity_type
+        method_name = ENTITY_CLASS_CONFIG.get(entity_type.lower())
+        if not method_name:
+            raise ValueError(f"Unknown entity type: {entity_type}")
+
+        transformer_method = getattr(self, method_name)
+        self.duplicate_count, self.problematic_records = transformer_method(
+            entity_df, entity_type
+        )
+
+        problematic_record_location = None
+        if not self.problematic_records.empty:
+            problematic_record_location = self.upload_problematic_records_to_s3(
+                data=self.problematic_records,
+                source=location,
+                dest_bucket=config.BRONZE_BUCKET,
+                dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/{entity_type}-problematic-{self.context['ds']}",
             )
-
-            problematic_record_location = None
-            if not self.problematic_records.empty:
-                problematic_record_location = self.upload_problematic_records_to_s3(
-                    data=self.problematic_records,
-                    source=location,
-                    dest_bucket=config.BRONZE_BUCKET,
-                    dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/{entity_type}-problematic-{self.context['ds']}",
-                )
 
             table_name = self.loader.get_table_name(entity_type)
             # table name will always be reliably consistent as long as transformer shares the same interface with load
@@ -259,8 +255,6 @@ class Transformer:
             ti.xcom_push(key="metadata", value=metadata)
 
             return metadata
-        except Exception as e:
-            raise DataLoadError(error=e, entity_type=entity_type)
 
     def transform_and_load_customer_data(
         self, df_customers: pd.DataFrame, entity_type: str

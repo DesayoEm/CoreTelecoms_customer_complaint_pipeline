@@ -6,8 +6,8 @@ from include.etl.extraction.google_extractor import GoogleSheetsExtractor
 from include.etl.extraction.sql_extractor import SQLEXtractor
 from include.etl.transformation.transformation import Transformer
 from include.notifications.success_notification import success_notification
-from dags.include.etl.load.ddl_scripts.create_tables import create_all_tables
-from dags.include.etl.load.ddl_scripts.truncate_staging import truncate_staging_tables
+from include.etl.load.ddl_scripts.create_tables import create_all_tables
+from include.etl.load.ddl_scripts.truncate_staging import truncate_staging_tables
 
 
 from airflow.utils.log.logging_mixin import LoggingMixin
