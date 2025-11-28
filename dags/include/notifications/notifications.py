@@ -21,8 +21,8 @@ def failure_notification(context):
     metadata = ti.xcom_pull(task_ids=ti.task_id, key="metadata")
 
     details = (
-        f"FAILURE ALERT: {ti.task_id} for CoreTelecoms for {context['ds']} SUCCEEDED\n\n"
-        f"Metrics: {metadata}\n\n"
+        f"FAILURE ALERT: {ti.task_id} for CoreTelecoms for {context['ds']} FAILED\n\n"
+        f"Details: {metadata}\n\n"
         f"---------------------------------------------\n\n\n"
     )
 

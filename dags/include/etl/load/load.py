@@ -129,54 +129,50 @@ class Loader:
             self.engine.dispose()
 
     def load_complaints_with_fk_validation(self, conn, staging_table, target_table):
+        """
+        Saves FK violations to quarantine
+        """
+        quarantine_result = conn.execute(
+            text(
+                f"""
+                INSERT INTO data_quality_quarantine (table_name, issue_type, record_data)
+                    SELECT 
+                    :table_name,
+                    'fk_violation',
+                    row_to_json(s.*)::jsonb
+                        FROM {staging_table} s
+                        LEFT JOIN conformed_customers c ON s.customer_id = c.customer_id
+                        LEFT JOIN conformed_agents a ON s.agent_id = a.agent_id
+                        WHERE c.customer_id IS NULL OR a.agent_id IS NULL
+                    """
+            ),
+            {"table_name": target_table},
+        )
+
+        violations_quarantined = quarantine_result.rowcount
+        if violations_quarantined > 0:
+            log.warning(
+                f"Quarantined {violations_quarantined} records with FK violations"
+            )
+
         result = conn.execute(
             text(
                 f"""
-            INSERT INTO {target_table}
-                SELECT * FROM {staging_table}
-                ON CONFLICT (complaint_id)
-                    DO UPDATE SET
-                        resolution_status = EXCLUDED.resolution_status,
-                        resolution_date = EXCLUDED.resolution_date,
-                        last_updated_at = CURRENT_TIMESTAMP
-                    """
+               INSERT INTO {target_table}
+               SELECT s.*
+               FROM {staging_table} s
+               INNER JOIN conformed_customers c ON s.customer_id = c.customer_id
+               INNER JOIN conformed_agents a ON s.agent_id = a.agent_id
+               ON CONFLICT (complaint_id) DO UPDATE SET
+                   resolution_status = EXCLUDED.resolution_status,
+                   resolution_date = EXCLUDED.resolution_date,
+                   updated_at = CURRENT_TIMESTAMP
+           """
             )
         )
 
-        fk_violations = conn.execute(
-            text(
-                f"""
-            SELECT s.*
-            FROM {staging_table} s
-            LEFT JOIN conformed_customers c ON s.customer_id = c.customer_id
-            LEFT JOIN conformed_agents a ON s.agent_id = a.agent_id
-            WHERE c.customer_id IS NULL OR a.agent_id IS NULL
-            """
-            )
-        ).fetchall()
-
-        if fk_violations:
-            self.save_to_quarantine(fk_violations, target_table, "fk_violation")
-            log.warning(f"Quarantined {len(fk_violations)} records with FK violations")
-
-        rows_inserted = conn.execute(
-            text(
-                f"""
-            INSERT INTO {target_table}
-            SELECT s.*
-            FROM {staging_table} s
-            INNER JOIN conformed_customers c ON s.customer_id = c.customer_id
-            INNER JOIN conformed_agents a ON s.agent_id = a.agent_id
-            ON CONFLICT (complaint_id) DO UPDATE SET
-                resolution_status = EXCLUDED.resolution_status,
-                resolution_date = EXCLUDED.resolution_date,
-                updated_at = CURRENT_TIMESTAMP
-        """
-            )
-        ).rowcount
-        rows_affected = result.rowcount
-
-        self.rows_loaded += rows_affected
+        rows_inserted = result.rowcount
+        self.rows_loaded += rows_inserted
         log.info(f"Loaded {rows_inserted} valid records to {target_table}")
 
     def load_customers(self, conn, staging_table, target_table):
@@ -185,8 +181,9 @@ class Loader:
                 f"""
                 INSERT INTO {target_table}
                 SELECT * FROM {staging_table}
-                ON CONFLICT (customer_id)
+                ON CONFLICT (customer_key) 
                 DO UPDATE SET
+                    customer_id = EXCLUDED.customer_id,
                     name = EXCLUDED.name,
                     gender = EXCLUDED.gender,
                     signup_date = EXCLUDED.signup_date,
@@ -196,7 +193,7 @@ class Loader:
                     state_code = EXCLUDED.state_code,
                     state = EXCLUDED.state,
                     last_updated_at = CURRENT_TIMESTAMP
-                """
+            """
             )
         )
         rows_affected = result.rowcount
@@ -219,23 +216,6 @@ class Loader:
         rows_affected = result.rowcount
         self.rows_loaded += rows_affected
         log.info(f"Loaded/updated {rows_affected} rows to {target_table}")
-
-    def save_to_quarantine(self, records, table_name, issue_type):
-        with self.engine.begin() as conn:
-            for record in records:
-                conn.execute(
-                    text(
-                        """
-                    INSERT INTO data_quality_quarantine (table_name, issue_type, record_data)
-                    VALUES (:table_name, :issue_type, :record_data)
-                """
-                    ),
-                    {
-                        "table_name": table_name,
-                        "issue_type": issue_type,
-                        "record_data": json.dumps(dict(record)),
-                    },
-                )
 
     @staticmethod
     def get_table_name(entity_type: str) -> str:

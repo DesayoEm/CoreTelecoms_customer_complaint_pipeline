@@ -5,7 +5,10 @@ from include.etl.extraction.s3_extractor import S3Extractor
 from include.etl.extraction.google_extractor import GoogleSheetsExtractor
 from include.etl.extraction.sql_extractor import SQLEXtractor
 from include.etl.transformation.transformation import Transformer
-from include.notifications.notifications import success_notification
+from include.notifications.notifications import (
+    success_notification,
+    failure_notification,
+)
 from include.etl.load.ddl_scripts.create_tables import create_all_tables
 from include.etl.load.cleanup import clear_all_checkpoints
 from include.etl.load.ddl_scripts.truncate_staging import truncate_staging_tables
@@ -19,6 +22,7 @@ default_args = {
     # "retries": 2,
     # "retry_delay": 10,
     "on_success_callback": success_notification,
+    "on_failure_callback": failure_notification,
 }
 
 

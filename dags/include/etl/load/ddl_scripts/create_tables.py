@@ -239,3 +239,13 @@ def create_all_tables():
                     """
             )
         )
+
+        # INDEXES
+        conn.execute(
+            text(
+                """
+               CREATE INDEX IF NOT EXISTS idx_customers_customer_id ON conformed_customers(customer_id);
+               CREATE INDEX IF NOT EXISTS idx_staged_customers_customer_id ON staging_conformed_customers(customer_id);
+            """
+            )
+        )
