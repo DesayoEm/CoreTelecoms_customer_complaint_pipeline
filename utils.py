@@ -34,12 +34,32 @@ def list_and_delete_all_tables(conn_string: str, dry_run: bool = True):
     engine.dispose()
 
 
-if __name__ == "__main__":
-    list_and_delete_all_tables(config.SILVER_DB_CONN_STRING, False)
-#
+def truncate_staging_tables():
+    engine = create_engine(config.SILVER_DB_CONN_STRING)
+
+    tables = [
+        "staging_conformed_sm_complaints",
+        "staging_conformed_web_complaints",
+        "staging_conformed_call_logs",
+        "staging_conformed_agents",
+        "staging_conformed_customers",
+    ]
+
+    table_list = ", ".join(tables)
+
+    with engine.begin() as conn:
+        conn.execute(text(f"TRUNCATE TABLE {table_list} CASCADE"))
+
+
+# if __name__ == "__main__":
+#     list_and_delete_all_tables(config.SILVER_DB_CONN_STRING, False)
+# #
 # with engine.begin() as conn:
 #     result = conn.execute(text("SELECT COUNT(*) FROM staging_conformed_customers"))
 #     rows = result.fetchall()
 #
 # for row in rows:
 #     print(row)
+
+if __name__ == "__main__":
+    truncate_staging_tables()

@@ -28,7 +28,7 @@ class Transformer:
         self.dq_checker = DataQualityChecker(self.cleaner)
         self.loader = Loader(self.context, self.s3_dest_hook)
         self.problematic_records: pd.DataFrame = pd.DataFrame()
-        self.batch_size: int = 100000
+        self.batch_size: int = 10
         self.duplicate_count: int = 0
 
     @staticmethod
@@ -131,23 +131,43 @@ class Transformer:
             raise DataLoadError(error=e, entity_type=entity_type)
 
         total_rows = len(entity_df)
+        # load in batches if more than 100k rows
         if total_rows > self.batch_size:
+            ti = self.context.get("task_instance")
+            task_instance = ti.task_id
             self.transform_and_load_batches(
-                entity_data_location, entity_type, entity_df, total_rows
+                entity_data_location, entity_type, entity_df, total_rows, task_instance
             )
         else:
             self.transform_and_load_all(entity_data_location, entity_type, entity_df)
 
     def transform_and_load_batches(
-        self, location: str, entity_type: str, entity_df: pd.DataFrame, total_rows: int
+        self,
+        location: str,
+        entity_type: str,
+        entity_df: pd.DataFrame,
+        total_rows: int,
+        task_instance: str,
     ):
         from include.etl.transformation.config.entity_class_config import (
             ENTITY_CLASS_CONFIG,
         )
 
+        batches_to_run = (total_rows + self.batch_size - 1) // self.batch_size
+
+        ti = self.context.get("task_instance")
+        start_batch = self.loader.last_completed_batch
+
+        log.info(f"nnnnnnnnnnnnnnnnnnnnnnnnnnn{start_batch}")
+        log.info(f"nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn{batches_to_run}")
+
+        if start_batch == batches_to_run and ti.try_number > 1:
+            # if load has completed in a previous run
+            log.info(f"{start_batch} batches completed. No more runs required")
+            return "WWWWWWWWWWWWWWW"
+
         log.info(
-            f"{total_rows} rows. {entity_type} will be loaded in "
-            f"{round(total_rows / self.batch_size)} batches"
+            f"{total_rows} {entity_type} will be loaded in " f"{batches_to_run} batches"
         )
 
         method_name = ENTITY_CLASS_CONFIG.get(entity_type.lower())
@@ -155,10 +175,7 @@ class Transformer:
             raise ValueError(f"Unknown entity type: {entity_type}")
 
         transformer_method = getattr(self, method_name)
-
-        start_batch = self.loader.state.last_completed_batch
-
-        for batch_num in range(start_batch, (total_rows // self.batch_size) + 1):
+        for batch_num in range(start_batch, batches_to_run):
             start_idx = batch_num * self.batch_size
             end_idx = min(start_idx + self.batch_size, total_rows)
 
@@ -173,40 +190,38 @@ class Transformer:
                 [self.problematic_records, batch_problems], ignore_index=True
             )
 
-            self.loader.save_checkpoint(
-                batch_num=batch_num + 1, rows_loaded=batch_num * self.batch_size
-            )
+            self.loader.save_checkpoint(batch_num=batch_num + 1, rows_loaded=end_idx)
             log.info(
                 f"Completed batch {batch_num + 1}, processed {end_idx}/{total_rows} rows"
             )
 
-            problematic_record_location = None
-            if not self.problematic_records.empty:
-                problematic_record_location = self.upload_problematic_records_to_s3(
-                    data=self.problematic_records,
-                    source=location,
-                    dest_bucket=config.BRONZE_BUCKET,
-                    dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/{entity_type}-problematic-{self.context['ds']}",
-                )
-            table_name = self.loader.get_table_name(entity_type)
-            # table name will always be reliably consistent as long as transformer shares the same interface with load
-            manifest_key = self.loader.create_load_manifest(entity_type, table_name)
+        problematic_record_location = None
+        if not self.problematic_records.empty:
+            problematic_record_location = self.upload_problematic_records_to_s3(
+                data=self.problematic_records,
+                source=location,
+                dest_bucket=config.BRONZE_BUCKET,
+                dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/{entity_type}-problematic-{self.context['ds']}",
+            )
+        table_name = self.loader.get_table_name(entity_type)
+        # table name will always be reliably consistent as long as transformer shares the same interface with load
+        manifest_key = self.loader.create_load_manifest(entity_type, table_name)
 
-            metadata = {
-                "rows_processed": total_rows,
-                "manifest_key": manifest_key,
-                "duplicates_removed": self.duplicate_count,
-                "problematic_rows_excluded": len(self.problematic_records),
-                "problematic_data_location": (
-                    problematic_record_location
-                    if problematic_record_location
-                    else "No problematic data points"
-                ),
-            }
-            ti = self.context.get("task_instance")
-            ti.xcom_push(key="metadata", value=metadata)
+        metadata = {
+            "rows_processed": total_rows,
+            "manifest_key": manifest_key,
+            "duplicates_removed": self.duplicate_count,
+            "problematic_rows_excluded": len(self.problematic_records),
+            "problematic_data_location": (
+                problematic_record_location
+                if problematic_record_location
+                else "No problematic data points"
+            ),
+        }
+        ti = self.context.get("task_instance")
+        ti.xcom_push(key="metadata", value=metadata)
 
-            return metadata
+        return metadata
 
     def transform_and_load_all(
         self, location: str, entity_type: str, entity_df: pd.DataFrame

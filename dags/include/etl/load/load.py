@@ -11,34 +11,55 @@ from airflow.utils.log.logging_mixin import LoggingMixin
 log = LoggingMixin().log
 
 
-@dataclass
-class LoadState:
-    """Checkpoint state for resumable loading."""
-
-    last_completed_batch: int = 0
-    rows_loaded: int = 0
-
-
 class StateLoader:
     """Loads checkpoint state from Airflow XCom."""
 
     @staticmethod
-    def load_starting_point_from_context(context: Dict) -> LoadState:
+    def load_starting_point_from_context(context: Dict) -> int:
         """Load checkpoint on retry, otherwise start fresh."""
+        current_execution_date = context.get("ds")
         ti = context.get("task_instance")
+        dag_run = context.get("dag_run")
 
-        if not ti or ti.try_number == 1:
-            log.info("Starting fresh (first attempt)")
-            return LoadState()
+        log.info(f"Task: {ti.task_id}, Execution Date: {current_execution_date}")
+        log.info(f"Try number: {ti.try_number}, Max tries: {ti.max_tries}")
 
-        checkpoint = ti.xcom_pull(task_ids=ti.task_id, key="checkpoint")
+        checkpoints = ti.xcom_pull(
+            task_ids=ti.task_id, key="checkpoint", include_prior_dates=True
+        )
 
-        if checkpoint:
-            log.info(f"Resuming from batch {checkpoint['last_completed_batch']}")
-            return LoadState(**checkpoint)
+        log.info(f"Raw checkpoints: {checkpoints}")
 
-        log.info("No checkpoint found, starting fresh")
-        return LoadState()
+        if not checkpoints:
+            log.info("No previous states found in XCom, starting fresh")
+            return 0
+
+        checkpoint_list = (
+            checkpoints if isinstance(checkpoints, list) else [checkpoints]
+        )
+
+        checkpoint_list.sort(key=lambda x: x.get("date", ""), reverse=True)
+
+        for checkpoint in checkpoint_list:
+            if checkpoint.get("date") == current_execution_date:
+                last_completed_batch = checkpoint.get("last_completed_batch")
+                if last_completed_batch:
+                    log.info(
+                        f"Found checkpoint for current date {current_execution_date}: batch {last_completed_batch}"
+                    )
+                    return last_completed_batch
+
+        if ti.try_number > 1 and checkpoint_list:
+            latest_checkpoint = checkpoint_list[0]
+            last_completed_batch = latest_checkpoint.get("last_completed_batch")
+            if last_completed_batch is not None:
+                log.info(
+                    f"Retry detected - using most recent checkpoint from {latest_checkpoint.get('date')}: batch {last_completed_batch}"
+                )
+                return last_completed_batch
+
+        log.info("No valid checkpoint found for this run, starting fresh")
+        return 0
 
 
 class Loader:
@@ -48,10 +69,10 @@ class Loader:
         self.context = context
         self.conn_string = config.SILVER_DB_CONN_STRING
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
-
-        self.state = StateLoader.load_starting_point_from_context(context)
-        self.last_completed_batch = self.state.last_completed_batch
-        self.rows_loaded = self.state.rows_loaded
+        self.last_completed_batch = StateLoader.load_starting_point_from_context(
+            context
+        )
+        self.rows_loaded: int = 0
 
     def load_data(self, data: pd.DataFrame, entity_type: str):
         table = self.get_table_name(entity_type)
@@ -223,11 +244,11 @@ class Loader:
         if not ti:
             return
 
+        current_execution_date = self.context.get("ds")
         checkpoint = {
             "last_completed_batch": batch_num,
             "rows_loaded": rows_loaded,
-            "timestamp": datetime.now().isoformat(),
+            "date": current_execution_date,
         }
-
         ti.xcom_push(key="checkpoint", value=checkpoint)
         log.info(f"Checkpoint saved: batch {batch_num}")
