@@ -318,10 +318,12 @@ class Transformer:
         df_agents, self.duplicate_count = self.remove_duplicates(df_agents)
         df_agents = self.standardize_columns(df_agents)
 
-        df_agents = df_agents[df_agents["id"].notna()]
+        df_agents = df_agents.rename(columns={"id": "agent_id"})
+        df_agents = df_agents[df_agents["agent_id"].notna()]
         df_agents["agent_key"] = self.apply_transformation(
-            df_agents["id"], self.generate_key
+            df_agents["agent_id"], self.generate_key
         )
+
         df_agents = self.add_key_as_first_column(df_agents, "agent_key")
 
         # problematic records are only read after generating key

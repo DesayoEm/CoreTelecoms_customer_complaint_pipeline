@@ -37,7 +37,7 @@ def create_all_tables():
                 """
             CREATE TABLE IF NOT EXISTS staging_conformed_agents (
                 agent_key VARCHAR(100) PRIMARY KEY,
-                id VARCHAR(50) UNIQUE NOT NULL,
+                agent_id VARCHAR(50) UNIQUE NOT NULL,
                 name VARCHAR(50) NOT NULL,
                 experience VARCHAR(50),
                 state VARCHAR(50),
@@ -142,7 +142,7 @@ def create_all_tables():
                 """
             CREATE TABLE IF NOT EXISTS conformed_agents (
                 agent_key VARCHAR(100) PRIMARY KEY,
-                id VARCHAR(50) UNIQUE NOT NULL,
+                agent_id VARCHAR(50) UNIQUE NOT NULL,
                 name VARCHAR(50) NOT NULL,
                 experience VARCHAR(50),
                 state VARCHAR(50),
@@ -171,7 +171,7 @@ def create_all_tables():
                 last_updated_at TIMESTAMP,
                 etl_loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (customer_id) REFERENCES conformed_customers(customer_id),
-                FOREIGN KEY (agent_id) REFERENCES conformed_agents(id)
+                FOREIGN KEY (agent_id) REFERENCES conformed_agents(agent_id)
             );
         """
             )
@@ -194,7 +194,7 @@ def create_all_tables():
                 last_updated_at TIMESTAMP,
                 etl_loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (customer_id) REFERENCES conformed_customers(customer_id),
-                FOREIGN KEY (agent_id) REFERENCES conformed_agents(id)
+                FOREIGN KEY (agent_id) REFERENCES conformed_agents(agent_id)
             );
         """
             )
@@ -218,7 +218,7 @@ def create_all_tables():
                 last_updated_at TIMESTAMP,
                 etl_loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (customer_id) REFERENCES conformed_customers(customer_id),
-                FOREIGN KEY (agent_id) REFERENCES conformed_agents(id)
+                FOREIGN KEY (agent_id) REFERENCES conformed_agents(agent_id)
             );
         """
             )

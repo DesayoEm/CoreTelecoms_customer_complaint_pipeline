@@ -56,6 +56,13 @@ class LoadStateHandler:
             log.info(f"Starting fresh from batch 0")
             return 0
 
+        except Exception as e:
+            log.info(
+                f"ERROR finding checkpoint for key: {checkpoint_key} \n Error: {e}"
+            )
+            log.info(f"Defaulting to 0")
+            return 0
+
     def save_checkpoint(self, batch_num: int, rows_loaded: int) -> None:
         """
         Save checkpoint to Airflow Variable for retry recovery.
@@ -117,18 +124,25 @@ class Loader:
                     method="multi",
                     chunksize=10000,
                 )
-                if "complaints" in entity_type:
-                    self.load_complaints_with_fk_validation(conn, staging_table, table)
-                elif "customer" in entity_type:
-                    self.load_customers(conn, staging_table, table)
-                elif "agents" in entity_type:
-                    self.load_agents(conn, staging_table, table)
+
+                method_map = {
+                    "customers": self.load_customers,
+                    "agents": self.load_agents,
+                    "call logs": self.load_call_logs_with_fk_validation,
+                    "sm complaints": self.load_sm_complaints_with_fk_validation,
+                    "web complaints": self.load_web_complaints_with_fk_validation,
+                }
+
+                if entity_type.lower() in method_map:
+                    method = method_map[entity_type.lower()]
+                    method(conn, staging_table, table)
+
                 else:
                     raise ValueError(f"Unknown entity type: {entity_type}")
         finally:
             self.engine.dispose()
 
-    def load_complaints_with_fk_validation(self, conn, staging_table, target_table):
+    def load_sm_complaints_with_fk_validation(self, conn, staging_table, target_table):
         """
         Saves FK violations to quarantine
         """
@@ -166,7 +180,100 @@ class Loader:
                ON CONFLICT (complaint_id) DO UPDATE SET
                    resolution_status = EXCLUDED.resolution_status,
                    resolution_date = EXCLUDED.resolution_date,
-                   updated_at = CURRENT_TIMESTAMP
+                   last_updated_at = CURRENT_TIMESTAMP
+           """
+            )
+        )
+
+        rows_inserted = result.rowcount
+        self.rows_loaded += rows_inserted
+        log.info(f"Loaded {rows_inserted} valid records to {target_table}")
+
+    def load_web_complaints_with_fk_validation(self, conn, staging_table, target_table):
+        """
+        Saves FK violations to quarantine
+        """
+        quarantine_result = conn.execute(
+            text(
+                f"""
+                INSERT INTO data_quality_quarantine (table_name, issue_type, record_data)
+                    SELECT 
+                    :table_name,
+                    'fk_violation',
+                    row_to_json(s.*)::jsonb
+                        FROM {staging_table} s
+                        LEFT JOIN conformed_customers c ON s.customer_id = c.customer_id
+                        LEFT JOIN conformed_agents a ON s.agent_id = a.agent_id
+                        WHERE c.customer_id IS NULL OR a.agent_id IS NULL
+                    """
+            ),
+            {"table_name": target_table},
+        )
+
+        violations_quarantined = quarantine_result.rowcount
+        if violations_quarantined > 0:
+            log.warning(
+                f"Quarantined {violations_quarantined} records with FK violations"
+            )
+
+        result = conn.execute(
+            text(
+                f"""
+               INSERT INTO {target_table}
+               SELECT s.*
+               FROM {staging_table} s
+               INNER JOIN conformed_customers c ON s.customer_id = c.customer_id
+               INNER JOIN conformed_agents a ON s.agent_id = a.agent_id
+               ON CONFLICT (request_id) DO UPDATE SET
+                   resolution_status = EXCLUDED.resolution_status,
+                   resolution_date = EXCLUDED.resolution_date,
+                   last_updated_at = CURRENT_TIMESTAMP
+           """
+            )
+        )
+
+        rows_inserted = result.rowcount
+        self.rows_loaded += rows_inserted
+        log.info(f"Loaded {rows_inserted} valid records to {target_table}")
+
+    def load_call_logs_with_fk_validation(self, conn, staging_table, target_table):
+        """
+        Loads call logs and saves FK violations to quarantine
+        """
+        quarantine_result = conn.execute(
+            text(
+                f"""
+                INSERT INTO data_quality_quarantine (table_name, issue_type, record_data)
+                    SELECT 
+                    :table_name,
+                    'fk_violation',
+                    row_to_json(s.*)::jsonb
+                        FROM {staging_table} s
+                        LEFT JOIN conformed_customers c ON s.customer_id = c.customer_id
+                        LEFT JOIN conformed_agents a ON s.agent_id = a.agent_id
+                        WHERE c.customer_id IS NULL OR a.agent_id IS NULL
+                    """
+            ),
+            {"table_name": target_table},
+        )
+
+        violations_quarantined = quarantine_result.rowcount
+        if violations_quarantined > 0:
+            log.warning(
+                f"Quarantined {violations_quarantined} records with FK violations"
+            )
+
+        result = conn.execute(
+            text(
+                f"""
+               INSERT INTO {target_table}
+               SELECT s.*
+               FROM {staging_table} s
+               INNER JOIN conformed_customers c ON s.customer_id = c.customer_id
+               INNER JOIN conformed_agents a ON s.agent_id = a.agent_id
+               ON CONFLICT (call_id) DO UPDATE SET
+                   resolution_status = EXCLUDED.resolution_status,
+                   last_updated_at = CURRENT_TIMESTAMP
            """
             )
         )
@@ -206,7 +313,7 @@ class Loader:
                 f"""
                 INSERT INTO {target_table}
                 SELECT * FROM {staging_table}
-                ON CONFLICT (id)
+                ON CONFLICT (agent_id)
                 DO UPDATE SET
                     experience = EXCLUDED.experience,
                     last_updated_at = CURRENT_TIMESTAMP

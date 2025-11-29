@@ -1,4 +1,5 @@
 from airflow.utils.log.logging_mixin import LoggingMixin
+from airflow.models.variable import Variable
 
 log = LoggingMixin().log
 
@@ -8,31 +9,37 @@ def clear_all_checkpoints(context):
     Clear all checkpoint variables for this DAG run after successful completion.
     Must be the last task in the DAG.
     """
-    from airflow.models import Variable
-
     execution_date = context["ds"]
-    all_variables = Variable.get_all()
-    checkpoints_to_clear = [
-        key for key in all_variables.keys() if key.endswith(f"_{execution_date}")
-    ]
+    dag = context["dag"]
 
-    if not checkpoints_to_clear:
-        log.info(f"No checkpoints found for execution date: {execution_date}")
-        metadata = {
-            "execution_date": execution_date,
-            "checkpoints_cleared": 0,
-        }
-        return metadata
+    task_ids = [task.task_id for task in dag.tasks]
+
+    log.info(f"Starting checkpoint cleanup for {execution_date}")
+    log.info(f"DAG has {len(task_ids)} tasks")
+    log.info(f"-------------")
 
     cleared_count = 0
-    for checkpoint_key in checkpoints_to_clear:
+    not_found_count = 0
+
+    for task_id in task_ids:
+        checkpoint_key = f"{task_id}_{execution_date}"
         try:
             Variable.delete(checkpoint_key)
             log.info(f"Cleared checkpoint: {checkpoint_key}")
             cleared_count += 1
         except KeyError:
-            log.warning(f"✗ Checkpoint not found: {checkpoint_key}")
+            log.debug(f"No checkpoint for: {checkpoint_key}")
+            not_found_count += 1
+        except Exception as e:
+            log.error(f"Failed to clear {checkpoint_key}: {e}")
 
-    log.info(f"Cleanup complete: {cleared_count} checkpoints cleared")
-    metadata = {"execution_date": execution_date, "checkpoints_cleared": cleared_count}
-    return metadata
+    log.info(f"total tasks: {len(task_ids)}")
+    log.info(f"Cleared: {cleared_count}")
+    log.info(f"Not found: {not_found_count}")
+
+    return {
+        "execution_date": execution_date,
+        "checkpoints_cleared": cleared_count,
+        "checkpoints_not_found": not_found_count,
+        "total_tasks": len(task_ids),
+    }

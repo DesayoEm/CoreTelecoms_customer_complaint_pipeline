@@ -62,10 +62,10 @@ if __name__ == "__main__":
 
 #
 # with engine.begin() as conn:
-#     result = conn.execute(text("SELECT COUNT(*) FROM staging_conformed_customers"))
+#     result = conn.execute(text("SELECT COUNT(*) FROM conformed_customers"))
 #     rows = result.fetchall()
 # engine.dispose()
-# #
+# # #
 # for row in rows:
 #     print(row)
 

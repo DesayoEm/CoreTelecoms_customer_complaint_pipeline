@@ -100,7 +100,7 @@ class DataQualityChecker:
     def identify_problematic_agents(self, df: pd.DataFrame) -> pd.DataFrame:
         """Identify agent records with validation failures"""
 
-        missing_natural_key_mask = df["id"].isna()
+        missing_natural_key_mask = df["agent_id"].isna()
         invalid_experience_mask = df["experience"].notna() & ~df[
             "experience"
         ].str.lower().isin(EXPERIENCE_LEVELS)
@@ -108,7 +108,7 @@ class DataQualityChecker:
         invalid_state_mask = df["state"].notna() & ~df["state"].str.lower().isin(STATES)
 
         mask_field_pairs = [
-            (missing_natural_key_mask, "id", "id"),
+            (missing_natural_key_mask, "agent_id", "agent_id"),
             (invalid_experience_mask, "experience", "experience"),
             (invalid_state_mask, "state", "state"),
         ]
