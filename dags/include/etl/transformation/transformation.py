@@ -247,26 +247,26 @@ class Transformer:
                 dest_key=f"{config.PROBLEMATIC_DATA_OBJ_PREFIX}/{entity_type}-problematic-{self.context['ds']}",
             )
 
-            table_name = self.loader.get_table_name(entity_type)
-            # table name will always be reliably consistent as long as transformer shares the same interface with load
+        table_name = self.loader.get_table_name(entity_type)
+        # table name will always be reliably consistent as long as transformer shares the same interface with load
 
-            manifest_key = self.loader.create_load_manifest(entity_type, table_name)
+        manifest_key = self.loader.create_load_manifest(entity_type, table_name)
 
-            metadata = {
-                "rows_processed": len(entity_df),
-                "manifest_key": manifest_key,
-                "duplicates_removed": self.duplicate_count,
-                "problematic_rows_excluded": len(self.problematic_records),
-                "problematic_data_location": (
-                    problematic_record_location
-                    if problematic_record_location
-                    else "No problematic data points"
-                ),
-            }
-            ti = self.context.get("task_instance")
-            ti.xcom_push(key="metadata", value=metadata)
+        metadata = {
+            "rows_processed": len(entity_df),
+            "manifest_key": manifest_key,
+            "duplicates_removed": self.duplicate_count,
+            "problematic_rows_excluded": len(self.problematic_records),
+            "problematic_data_location": (
+                problematic_record_location
+                if problematic_record_location
+                else "No problematic data points"
+            ),
+        }
+        ti = self.context.get("task_instance")
+        ti.xcom_push(key="metadata", value=metadata)
 
-            return metadata
+        return metadata
 
     def transform_and_load_customer_data(
         self, df_customers: pd.DataFrame, entity_type: str
