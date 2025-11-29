@@ -261,7 +261,7 @@ class Transformer:
                 problematic_record_location
                 if problematic_record_location
                 else "No problematic data points"
-            ),
+            )
         }
         ti = self.context.get("task_instance")
         ti.xcom_push(key="metadata", value=metadata)
