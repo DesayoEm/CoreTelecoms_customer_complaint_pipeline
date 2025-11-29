@@ -19,7 +19,7 @@ def persist_ingestion_metadata_before_failure(
         f"FAILURE ALERT: {info['task']} for CoreTelecoms ingestion for {info['execution_date']} FAILED\n\n"
         f"extra_info: {extra_info}\n\n"
         f"ERROR: {error}"
-        f"---------------------------------------------\n\n\n"
+        f"-----------------------------------\n\n\n"
     )
 
     notifier = SlackNotifier(slack_conn_id="slack", text=details, channel="dag_alerts")

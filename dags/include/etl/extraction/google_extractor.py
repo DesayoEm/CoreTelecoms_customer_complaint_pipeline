@@ -49,7 +49,7 @@ class GoogleSheetsExtractor:
                 service_name="secretsmanager", region_name=config.AWS_REGION
             )
 
-            response = client.get_secret_value(SecretId="google_cloud_credv3")
+            response = client.get_secret_value(SecretId="google_cloud_credv5")
             return json.loads(response["SecretString"])
 
         except Exception as e:
@@ -147,6 +147,10 @@ class GoogleSheetsExtractor:
             metadata = {**metadata, **conversion_result}
 
             log.info(f"Successfully copied agents data: {metadata['row_count']} rows")
+
+            ti = self.context["task_instance"]
+            ti.xcom_push(key="metadata", value=metadata)
+
             return metadata
 
         except gspread.exceptions.SpreadsheetNotFound as e:

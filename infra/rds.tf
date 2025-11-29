@@ -1,11 +1,11 @@
 resource "aws_db_instance" "ctp_db_instance" {
-  allocated_storage           = 20
+  allocated_storage           = 100
   db_name                     = "ct_postgres"
   engine                      = "postgres"
   port                        = 5432
   engine_version              = "16.11"
-  instance_class              = "db.t3.micro"
-  multi_az                    = true
+  instance_class              = "db.m5.large"
+  multi_az                    = false
   db_subnet_group_name        = aws_db_subnet_group.ctp_db_subnet_group.name
   vpc_security_group_ids      = [aws_security_group.database_security_group.id]
   username                    = "ctpadmin"

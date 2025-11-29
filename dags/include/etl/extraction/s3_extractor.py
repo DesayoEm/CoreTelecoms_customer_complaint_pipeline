@@ -14,6 +14,7 @@ from include.exceptions.exceptions import (
     UnSupportedFileFormatError,
     EmptyDataFrameError,
 )
+
 from airflow.utils.log.logging_mixin import LoggingMixin
 
 log = LoggingMixin().log
@@ -109,6 +110,8 @@ class S3Extractor:
                 "file_size_bytes": len(bytes_data),
                 "format": "parquet",
             }
+            ti = self.context["task_instance"]
+            ti.xcom_push(key="metadata", value=metadata)
             return metadata
 
         if file_ext not in format_map:
@@ -176,6 +179,8 @@ class S3Extractor:
             "file_size_bytes": file_size_bytes,
             "format": "parquet",
         }
+        ti = self.context["task_instance"]
+        ti.xcom_push(key="metadata", value=metadata)
         return metadata
 
     def copy_customers_data(self) -> Dict[str, any]:

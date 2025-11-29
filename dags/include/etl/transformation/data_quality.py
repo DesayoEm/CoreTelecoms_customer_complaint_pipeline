@@ -1,8 +1,8 @@
 from typing import List, Dict, Tuple
 import pandas as pd
 from datetime import datetime
-from dags.include.etl.transformation.data_cleaning import Cleaner
-from dags.include.etl.transformation.enums import (
+from include.etl.transformation.data_cleaning import Cleaner
+from include.etl.transformation.config.enums import (
     GENDER,
     EXPERIENCE_LEVELS,
     STATES,
@@ -73,6 +73,7 @@ class DataQualityChecker:
     def identify_problematic_customers(self, df: pd.DataFrame) -> pd.DataFrame:
         """Identify customer records with validation failures"""
 
+        missing_natural_key_mask = df["customer_id"].isna()
         invalid_gender_mask = df["gender"].notna() & ~df["gender"].str.lower().isin(
             GENDER
         )
@@ -88,6 +89,7 @@ class DataQualityChecker:
         missing_state_mask = df["address"].notna() & state_code_series.isna()
 
         mask_field_pairs = [
+            (missing_natural_key_mask, "customer_id", "customer_id"),
             (invalid_gender_mask, "gender", "gender"),
             (invalid_email_mask, "email", "email"),
             (missing_state_mask, "state_code", "address"),
@@ -98,6 +100,7 @@ class DataQualityChecker:
     def identify_problematic_agents(self, df: pd.DataFrame) -> pd.DataFrame:
         """Identify agent records with validation failures"""
 
+        missing_natural_key_mask = df["agent_id"].isna()
         invalid_experience_mask = df["experience"].notna() & ~df[
             "experience"
         ].str.lower().isin(EXPERIENCE_LEVELS)
@@ -105,6 +108,7 @@ class DataQualityChecker:
         invalid_state_mask = df["state"].notna() & ~df["state"].str.lower().isin(STATES)
 
         mask_field_pairs = [
+            (missing_natural_key_mask, "agent_id", "agent_id"),
             (invalid_experience_mask, "experience", "experience"),
             (invalid_state_mask, "state", "state"),
         ]
@@ -113,6 +117,8 @@ class DataQualityChecker:
 
     def identify_problematic_web_complaints(self, df: pd.DataFrame) -> pd.DataFrame:
         """Identify web complaint records with validation failures"""
+
+        missing_natural_key_mask = df["request_id"].isna()
 
         invalid_category_mask = df["complaint_category"].notna() & ~df[
             "complaint_category"
@@ -123,6 +129,7 @@ class DataQualityChecker:
         ].str.lower().isin(RESOLUTION_STATUS)
 
         mask_field_pairs = [
+            (missing_natural_key_mask, "request_id", "request_id"),
             (invalid_category_mask, "complaint_category", "complaint_category"),
             (invalid_status_mask, "resolution_status", "resolution_status"),
         ]
@@ -132,6 +139,7 @@ class DataQualityChecker:
     def identify_problematic_sm_complaints(self, df: pd.DataFrame) -> pd.DataFrame:
         """Identify social media complaint records with validation failures"""
 
+        missing_natural_key_mask = df["complaint_id"].isna()
         invalid_category_mask = df["complaint_category"].notna() & ~df[
             "complaint_category"
         ].str.lower().isin(COMPLAINT_CATEGORIES)
@@ -145,6 +153,7 @@ class DataQualityChecker:
         ].str.lower().isin(MEDIA_CHANNELS)
 
         mask_field_pairs = [
+            (missing_natural_key_mask, "complaint_id", "complaint_id"),
             (invalid_category_mask, "complaint_category", "complaint_category"),
             (invalid_status_mask, "resolution_status", "resolution_status"),
             (invalid_channel_mask, "media_channel", "media_channel"),
@@ -155,6 +164,8 @@ class DataQualityChecker:
     def identify_problematic_call_logs(self, df: pd.DataFrame) -> pd.DataFrame:
         """Identify call log records with validation failures"""
 
+        missing_natural_key_mask = df["call_id"].isna()
+
         invalid_category_mask = df["complaint_category"].notna() & ~df[
             "complaint_category"
         ].str.lower().isin(COMPLAINT_CATEGORIES)
@@ -164,6 +175,7 @@ class DataQualityChecker:
         ].str.lower().isin(RESOLUTION_STATUS)
 
         mask_field_pairs = [
+            (missing_natural_key_mask, "call_id", "call_id"),
             (invalid_category_mask, "complaint_category", "complaint_category"),
             (invalid_status_mask, "resolution_status", "resolution_status"),
         ]

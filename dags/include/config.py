@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     SRC_DB_CONN_STRING: str
     SRC_DB_SCHEMA: str
 
+    SILVER_DB_CONN_STRING: str
+
     # bucket keys
     BRONZE_BUCKET: str
     CUSTOMER_DATA_STAGING_DEST: str
