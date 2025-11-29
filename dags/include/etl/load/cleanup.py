@@ -7,7 +7,7 @@ log = LoggingMixin().log
 def clear_all_checkpoints(context):
     """
     Clear all checkpoint variables for this DAG run after successful completion.
-    Must be the last task in the DAG.
+    Must be the last task to run in the DAG.
     """
     execution_date = context["ds"]
     dag = context["dag"]
@@ -39,7 +39,7 @@ def clear_all_checkpoints(context):
 
     return {
         "execution_date": execution_date,
+        "total_tasks": len(task_ids),
         "checkpoints_cleared": cleared_count,
         "checkpoints_not_found": not_found_count,
-        "total_tasks": len(task_ids),
     }
