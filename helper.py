@@ -52,23 +52,18 @@ def truncate_staging_tables():
     engine.dispose()
 
 
-if __name__ == "__main__":
-    list_and_delete_all_tables(False)
+# if __name__ == "__main__":
+#     list_and_delete_all_tables(False)
 
 
 # if __name__ == "__main__":
 #     truncate_staging_tables()
 
-
-#
 # with engine.begin() as conn:
-#     result = conn.execute(text("SELECT COUNT(*) FROM conformed_customers"))
+#     result = conn.execute(text("SELECT COUNT(*) FROM data_quality_quarantine"))
 #     rows = result.fetchall()
 # engine.dispose()
-# # #
+#
+#
 # for row in rows:
 #     print(row)
-
-
-#
-# engine = create_engine(conn_string, isolation_level="AUTOCOMMIT")
