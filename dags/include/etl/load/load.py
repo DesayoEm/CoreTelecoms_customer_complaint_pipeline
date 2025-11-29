@@ -4,6 +4,9 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from datetime import datetime
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+from snowflake.connector.pandas_tools import write_pandas
 from airflow.models import Variable
 from include.config import config
 from airflow.utils.log.logging_mixin import LoggingMixin
@@ -23,7 +26,7 @@ class LoadStateHandler:
         Returns last completed batch number, or 0 if no checkpoint exists.
         """
         ti = self.context.get("task_instance")
-        if ti.try_number == 1:  # don't access checkpoint on first run
+        if ti.try_number == 1:  # checkpoint must not be accessed on first run
             log.info("First run. Starting fresh load")
             return 0
 
@@ -353,3 +356,26 @@ class Loader:
         )
 
         return manifest_key
+
+    def load_tables_to_snowflake(self, entity_type: str) -> None:
+        table_name = entity_type.replace(" ", "_")
+
+        pg_hook = PostgresHook("rds_postgres")
+        sf_hook = SnowflakeHook("snowflake")
+        df = pg_hook.get_pandas_df(f"SELECT * FROM conformed_{table_name}")
+
+        execution_date = self.context["ds"]
+        df["loaded_at"] = execution_date
+        df.columns = [col.upper() for col in df.columns]
+
+        with sf_hook.get_conn() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                f"""
+                DELETE FROM CORETELECOMS_DB.RAW.{table_name.upper()}
+                WHERE loaded_at = '{execution_date}'
+            """
+            )
+
+            write_pandas(conn, df, table_name.upper(), "CORETELECOMS_DB", "RAW")

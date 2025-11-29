@@ -14,7 +14,7 @@ def list_and_delete_all_tables(dry_run: bool = True):
         print(f"  - {table}")
 
     if dry_run:
-        print("\nDry run mode. Set dry_run=False to actually delete.")
+        print("\ndry_run=False to delete.")
         engine.dispose()
         return
 
@@ -52,15 +52,15 @@ def truncate_staging_tables():
     engine.dispose()
 
 
-# if __name__ == "__main__":
-#     list_and_delete_all_tables(False)
+if __name__ == "__main__":
+    list_and_delete_all_tables(False)
 
 
 # if __name__ == "__main__":
 #     truncate_staging_tables()
 
 # with engine.begin() as conn:
-#     result = conn.execute(text("SELECT COUNT(*) FROM data_quality_quarantine"))
+#     result = conn.execute(text("SELECT COUNT(*) FROM conformed_customers"))
 #     rows = result.fetchall()
 # engine.dispose()
 #

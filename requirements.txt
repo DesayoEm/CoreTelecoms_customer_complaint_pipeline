@@ -1,8 +1,11 @@
 apache-airflow[amazon]==3.0.6
 apache-airflow-providers-slack==9.3.0
+apache-airflow-providers-postgres==6.4.1
+apache-airflow-providers-snowflake==6.6.1
 pandas>=2.1.0,<2.2.0
 numpy>=1.26.0,<2.0.0
-pyarrow>=14.0.0,<15.0.0
+#pyarrow>=14.0.0,<15.0.0
+pyarrow==22.0.0
 SQLAlchemy>=1.4.0,<2.0.0
 psycopg2-binary>=2.9.0
 awscli==1.42.59
@@ -16,5 +19,4 @@ flake8==7.3.0
 pytest==9.0.1
 pytest-mock==3.15.1
 pytest-cov==7.0.0
-faker==38.2.0
-freezegun==1.5.5
+
