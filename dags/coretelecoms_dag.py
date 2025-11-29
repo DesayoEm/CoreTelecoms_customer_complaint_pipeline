@@ -9,6 +9,7 @@ from include.notifications.notifications import (
     success_notification,
     failure_notification,
 )
+from include.etl.load.load import Loader
 from include.etl.load.ddl_scripts.create_tables import create_all_tables
 from include.etl.load.cleanup import clear_all_checkpoints
 from include.etl.load.ddl_scripts.truncate_staging import truncate_staging_tables
@@ -128,40 +129,78 @@ def process_complaint_data():
         context = get_current_context()
         return clear_all_checkpoints(context=context)
 
-    raw_customer_data = ingest_customer_data_task()
-    raw_agents_data = ingest_agents_data_task()
-    raw_call_logs = ingest_call_logs_task()
-    raw_sm_complaints = ingest_sm_complaints_task()
-    raw_web_complaints_data = ingest_web_complaints_data_task()
+    @task
+    def load_customers_to_wh_task():
+        context = get_current_context()
+        loader = Loader(context=context)
+        return loader.load_tables_to_snowflake("customers")
 
-    tables = create_all_tables_task()
-    clear_staging = truncate_staging_tables_task()
+    @task
+    def load_agents_to_wh_task():
+        context = get_current_context()
+        loader = Loader(context=context)
+        return loader.load_tables_to_snowflake(entity_type="agents")
 
-    transform_and_load_customers = transform_and_load_customers_task(raw_customer_data)
-    transform_and_load_agents = transform_and_load_agents_task(raw_agents_data)
 
-    tables >> clear_staging >> [transform_and_load_customers, transform_and_load_agents]
+    @task
+    def load_call_logs_to_wh_task():
+        context = get_current_context()
+        loader = Loader(context=context)
+        return loader.load_tables_to_snowflake(entity_type="call logs")
 
-    transform_and_load_call_logs = transform_and_load_call_logs_task(raw_call_logs)
-    transform_and_load_sm_complaints = transform_and_load_sm_complaints_task(
-        raw_sm_complaints
-    )
-    transform_and_load_web_complaints = transform_and_load_web_complaints_task(
-        raw_web_complaints_data
-    )
+    @task
+    def load_sm_complaints_to_wh_task():
+        context = get_current_context()
+        loader = Loader(context=context)
+        return loader.load_tables_to_snowflake(entity_type="sm complaints")
 
-    downstream_tasks = [
-        transform_and_load_call_logs,
-        transform_and_load_sm_complaints,
-        transform_and_load_web_complaints,
-    ]
+    @task
+    def load_web_complaints_to_wh_task():
+        context = get_current_context()
+        loader = Loader(context=context)
+        return loader.load_tables_to_snowflake(entity_type="web complaints")
 
-    for upstream in [transform_and_load_customers, transform_and_load_agents]:
-        for downstream in downstream_tasks:
-            upstream >> downstream
 
-    cleanup = cleanup_checkpoints_task()
-    downstream_tasks >> cleanup
+    # raw_customer_data = ingest_customer_data_task()
+    # raw_agents_data = ingest_agents_data_task()
+    # raw_call_logs = ingest_call_logs_task()
+    # raw_sm_complaints = ingest_sm_complaints_task()
+    # raw_web_complaints_data = ingest_web_complaints_data_task()
+    #
+    # tables = create_all_tables_task()
+    # clear_staging = truncate_staging_tables_task()
+    #
+    # transform_and_load_customers = transform_and_load_customers_task(raw_customer_data)
+    # transform_and_load_agents = transform_and_load_agents_task(raw_agents_data)
+    #
+    # tables >> clear_staging >> [transform_and_load_customers, transform_and_load_agents]
+    #
+    # transform_and_load_call_logs = transform_and_load_call_logs_task(raw_call_logs)
+    # transform_and_load_sm_complaints = transform_and_load_sm_complaints_task(
+    #     raw_sm_complaints
+    # )
+    # transform_and_load_web_complaints = transform_and_load_web_complaints_task(
+    #     raw_web_complaints_data
+    # )
+    #
+    # downstream_tasks = [
+    #     transform_and_load_call_logs,
+    #     transform_and_load_sm_complaints,
+    #     transform_and_load_web_complaints,
+    # ]
+    #
+    # for upstream in [transform_and_load_customers, transform_and_load_agents]:
+    #     for downstream in downstream_tasks:
+    #         upstream >> downstream
+    #
+    # cleanup = cleanup_checkpoints_task()
+    # downstream_tasks >> cleanup
+
+    load_customers_to_wh = load_customers_to_wh_task()
+    load_agents_to_wh = load_agents_to_wh_task()
+    load_call_logs_to_wh = load_call_logs_to_wh_task()
+    load_sm_complaints_to_wh = load_sm_complaints_to_wh_task()
+    load_web_complaints_to_wh = load_web_complaints_to_wh_task()
 
 
 process_complaint_data()
