@@ -141,7 +141,6 @@ def process_complaint_data():
         loader = Loader(context=context)
         return loader.load_tables_to_snowflake(entity_type="agents")
 
-
     @task
     def load_call_logs_to_wh_task():
         context = get_current_context()
@@ -159,7 +158,6 @@ def process_complaint_data():
         context = get_current_context()
         loader = Loader(context=context)
         return loader.load_tables_to_snowflake(entity_type="web complaints")
-
 
     # raw_customer_data = ingest_customer_data_task()
     # raw_agents_data = ingest_agents_data_task()

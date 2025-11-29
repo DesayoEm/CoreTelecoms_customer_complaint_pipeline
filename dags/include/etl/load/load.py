@@ -357,26 +357,25 @@ class Loader:
 
         return manifest_key
 
-
     def load_tables_to_snowflake(self, entity_type: str) -> None:
         table_name = entity_type.replace(" ", "_")
 
+        pg_hook = PostgresHook("rds_postgres")
+        sf_hook = SnowflakeHook("snowflake")
+        df = pg_hook.get_pandas_df(f"SELECT * FROM conformed_{table_name}")
 
-        pg_hook = PostgresHook('rds_postgres')
-        sf_hook = SnowflakeHook('snowflake')
-        df = pg_hook.get_pandas_df(f'SELECT * FROM conformed_{table_name}')
-
-        execution_date = self.context['ds']
-        df['loaded_at'] =execution_date
+        execution_date = self.context["ds"]
+        df["loaded_at"] = execution_date
         df.columns = [col.upper() for col in df.columns]
 
         with sf_hook.get_conn() as conn:
             cursor = conn.cursor()
 
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 DELETE FROM CORETELECOMS_DB.RAW.{table_name.upper()}
                 WHERE loaded_at = '{execution_date}'
-            """)
+            """
+            )
 
-            write_pandas(conn, df, table_name.upper(), 'CORETELECOMS_DB', 'RAW')
-
+            write_pandas(conn, df, table_name.upper(), "CORETELECOMS_DB", "RAW")
