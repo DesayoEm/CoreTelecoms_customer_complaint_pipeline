@@ -1,3 +1,5 @@
+version: 1.0.0
+
 sources:
   - name: raw
     description: Staging tables in Snowflake
@@ -13,3 +15,14 @@ sources:
         identifier: SM_COMPLAINTS
       - name: web_complaints
         identifier: WEB_COMPLAINTS
+        loaded_at_field: loaded_at
+        freshness:
+          warn_after:
+            count: 24
+            period: hour
+          error_after:
+            count: 60 #to fix
+            period: hour
+          
+          
+          

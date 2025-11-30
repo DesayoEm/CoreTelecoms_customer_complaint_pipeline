@@ -28,7 +28,7 @@ changed_records as (
         d.experience as old_experience,
         -- detect if experience changed
         case 
-            when d.agent_key is null then 'NEW'  -- brand new agent
+            when d.agent_key is null then 'NEW'  --  new agent
             when s.experience != d.experience then 'CHANGED'  -- experience changed
             else 'UNCHANGED'
         end as change_type
@@ -46,7 +46,7 @@ expired_records as (
         d.name,
         d.experience,
         d.experience_effective_date,
-        current_date()-1 as experience_exp_date,  -- must be expired a today beforeto avoid overlap
+        current_date()-1 as experience_exp_date,  -- must be expired prcvious day so as to avoid overlap
         0 as is_active,  -- no longer active
         d.state,
         d.last_updated_at,
@@ -57,10 +57,10 @@ expired_records as (
         and c.change_type = 'CHANGED'
 ),
 
--- Insert new records for changes
+-- new records for changes
 new_versions as (
     select
-        {{ dbt_utils.generate_surrogate_key(['agent_id', 'last_updated_at']) }} as agent_key,
+        agent_key,
         agent_id,
         name,
         experience,
@@ -69,12 +69,12 @@ new_versions as (
         1 as is_active,  
         state,
         last_updated_at,
-        loaded_at
+        d.loaded_at
     from changed_records
     where change_type in ('NEW', 'CHANGED')
 ),
 
--- unchanged records stay unchanged
+-- unchanged records
 unchanged_records as (
     select
         d.*
