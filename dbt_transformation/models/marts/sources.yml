@@ -1,0 +1,15 @@
+sources:
+  - name: raw
+    description: Staging tables in Snowflake
+    schema: raw
+    tables:
+      - name: customers
+        identifier: CUSTOMERS
+      - name: agents
+        identifier: AGENTS
+      - name: call_logs
+        identifier: CALL_LOGS
+      - name: sm_complaints
+        identifier: SM_COMPLAINTS
+      - name: web_complaints
+        identifier: WEB_COMPLAINTS
