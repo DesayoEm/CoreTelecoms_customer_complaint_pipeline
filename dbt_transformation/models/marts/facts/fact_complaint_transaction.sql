@@ -71,7 +71,7 @@ with
             {{ ref("dim_agents") }} agt
             on cl.agent_id = agt.agent_id
             and cl.complaint_date >= agt.experience_effective_date
-            and (cl.complaint_date <= agt.experience_exp_date or agt.is_active = 1)
+            and (cl.complaint_date <= agt.experience_expiry_date or agt.is_active = 1)
     ),
 
     sm_complaints_transformed as (
@@ -114,7 +114,7 @@ with
             {{ ref("dim_agents") }} agt
             on sc.agent_id = agt.agent_id
             and sc.complaint_date >= agt.experience_effective_date
-            and (sc.complaint_date <= agt.experience_exp_date or agt.is_active = 1)
+            and (sc.complaint_date <= agt.experience_expiry_date or agt.is_active = 1)
     ),
 
     web_complaints_transformed as (
@@ -157,7 +157,7 @@ with
             {{ ref("dim_agents") }} agt
             on wc.agent_id = agt.agent_id
             and wc.complaint_date >= agt.experience_effective_date
-            and (wc.complaint_date <= agt.experience_exp_date or agt.is_active = 1)
+            and (wc.complaint_date <= agt.experience_expiry_date or agt.is_active = 1)
     ),
 
     final as (

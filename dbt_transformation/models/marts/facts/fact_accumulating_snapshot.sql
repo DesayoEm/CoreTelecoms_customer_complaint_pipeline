@@ -30,7 +30,8 @@ call_logs_lifecycle as (
         case when resolution_status = 'closed' 
             then call_end_time end as closed_date,
         resolution_status as current_status,
-        loaded_at
+        loaded_at,
+        updated_at
     from {{ source('raw', 'call_logs') }}
 ),
 
@@ -47,7 +48,8 @@ sm_complaints_lifecycle as (
         case when resolution_status = 'closed' 
             then resolution_date end as closed_date,
         resolution_status as current_status,
-        loaded_at
+        loaded_at,
+        updated_at
     from {{ source('raw', 'sm_complaints') }}
 ),
 
@@ -64,7 +66,8 @@ web_complaints_lifecycle as (
         case when resolution_status = 'closed' 
             then resolution_date end as closed_date,
         resolution_status as current_status,
-        loaded_at
+        loaded_at,
+        updated_at
     from {{ source('raw', 'web_complaints') }}
 ),
 
