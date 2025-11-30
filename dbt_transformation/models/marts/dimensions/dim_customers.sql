@@ -1,0 +1,96 @@
+{{ config(
+    materialized='table',
+    unique_key='customer_key',
+    schema='analytics'
+) }}
+
+with customers_source as (
+    select * from {{ source('raw', 'customers') }}
+),
+
+current_dim as (
+    select * from {{ this }}
+    {% if is_incremental() %}
+    where is_active = 1  
+    {% endif %}
+),
+
+
+changed_records as (
+    select
+        s.customer_id,
+        s.name,
+        s.experience,
+        s.state,
+        s.last_updated_at,
+        s.loaded_at,
+        d.customer_key as existing_key,
+        d.experience as old_experience,
+        -- detect if experience changed
+        case 
+            when d.customer_key is null then 'NEW'  -- brand new customer
+            when s.experience != d.experience then 'CHANGED'  -- experience changed
+            else 'UNCHANGED'
+        end as change_type
+    from customers_source s
+    left join current_dim d 
+        on s.customer_id = d.customer_id 
+        and d.is_active = 1
+),
+
+-- expire old records
+expired_records as (
+    select
+        d.customer_key,
+        d.customer_id,
+        d.name,
+        d.experience,
+        d.experience_effective_date,
+        current_date()-1 as experience_exp_date,  -- must be expired a today beforeto avoid overlap
+        0 as is_active,  -- no longer active
+        d.state,
+        d.last_updated_at,
+        d.loaded_at
+    from current_dim d
+    inner join changed_records c 
+        on d.customer_id = c.customer_id 
+        and c.change_type = 'CHANGED'
+),
+
+-- Insert new records for changes
+new_versions as (
+    select
+        {{ dbt_utils.generate_surrogate_key(['customer_id', 'last_updated_at']) }} as customer_key,
+        customer_id,
+        name,
+        experience,
+        current_date() as experience_effective_date,  -- effective today
+        null as experience_exp_date,  -- open-ended as its current
+        1 as is_active,  
+        state,
+        last_updated_at,
+        loaded_at
+    from changed_records
+    where change_type in ('NEW', 'CHANGED')
+),
+
+-- unchanged records stay unchanged
+unchanged_records as (
+    select
+        d.*
+    from current_dim d
+    inner join changed_records c 
+        on d.customer_id = c.customer_id 
+        and c.change_type = 'UNCHANGED'
+),
+
+
+final as (
+    select * from expired_records
+    union all
+    select * from new_versions
+    union all
+    select * from unchanged_records
+)
+
+select * from final
