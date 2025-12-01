@@ -51,7 +51,7 @@ changed_records as (
         d.experience as old_experience,
         case 
             when d.agent_key is null then 'NEW'
-            when s.experience != d.experience then 'CHANGED'
+            when s.experience IS DISTINCT FROM d.experience then 'CHANGED'
             else 'UNCHANGED'
         end as change_type
     from agents_source s

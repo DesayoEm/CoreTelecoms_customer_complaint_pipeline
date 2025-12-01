@@ -22,6 +22,7 @@ current_dim as(
     where is_active = 1
     {%endif%}
 ),
+
 {%else%}
 current_dim as(
     select
@@ -33,7 +34,7 @@ current_dim as(
         cast(null as date) as signup_date,
         cast(null as varchar) as email,
         cast(null as varchar) as address,
-         cast(null as varchar) as zip_code,
+        cast(null as varchar) as zip_code,
         cast(null as varchar) as state,
         cast(null as date) as address_effective_date,
         cast(null as date) as address_expiry_date,
@@ -63,8 +64,11 @@ changed_records as (
         d.zip_code as old_zip_code,
         d.state as old_state,
         case 
-            when d.customer_key is NULL then 'NEW'
-            when s.address != d.address or s.zip_code != d.zip_code or s.state != d.state then 'CHANGED'
+            when d.customer_key IS NULL then 'NEW'
+            when s.address IS DISTINCT FROM d.address 
+              or s.zip_code IS DISTINCT FROM d.zip_code 
+              or s.state IS DISTINCT FROM d.state 
+            then 'CHANGED'
             else 'UNCHANGED'
         end as change_type
     from customers_source s
@@ -72,6 +76,7 @@ changed_records as (
         on s.customer_id = d.customer_id 
         and d.is_active = 1
 ), 
+
 expired_records as(
      select
         d.customer_key,
@@ -126,13 +131,14 @@ unchanged_records as (
 ),
 
 final as (
+    select * from new_versions
+    {% if is_incremental() %}
+    union all
     select * from expired_records
     union all
-    select * from new_versions
-    union all
     select * from unchanged_records
+    {% endif %}
 )
-
 select * from final
 
 
