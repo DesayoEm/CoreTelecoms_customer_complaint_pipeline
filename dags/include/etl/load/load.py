@@ -386,9 +386,9 @@ class Loader:
 
             cursor.execute(
                 f"""
-                DELETE FROM CORETELECOMS_DB.RAW.{table_name.upper()}
+                DELETE FROM CORETELECOMS_DB.STG.{table_name.upper()}
                 WHERE loaded_at = '{execution_date}'
             """
             )
 
-            write_pandas(conn, df, table_name.upper(), "CORETELECOMS_DB", "RAW")
+            write_pandas(conn, df, table_name.upper(), "CORETELECOMS_DB", "STG")
