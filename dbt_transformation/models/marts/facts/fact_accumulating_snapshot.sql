@@ -9,9 +9,8 @@
 with complaint_base as (
     select
         complaint_key,
-        complaint_id,
-        customer_id,
-        agent_id,
+        customer_key,
+        agent_key,
         complaint_date,
         complaint_type
     from {{ ref('fact_complaint_transaction') }}
@@ -31,7 +30,7 @@ call_logs_lifecycle as (
             then call_end_time end as closed_date,
         resolution_status as current_status,
         loaded_at,
-        updated_at
+        last_updated_at
     from {{ source('raw', 'call_logs') }}
 ),
 
@@ -49,7 +48,7 @@ sm_complaints_lifecycle as (
             then resolution_date end as closed_date,
         resolution_status as current_status,
         loaded_at,
-        updated_at
+        last_updated_at
     from {{ source('raw', 'sm_complaints') }}
 ),
 
@@ -67,7 +66,7 @@ web_complaints_lifecycle as (
             then resolution_date end as closed_date,
         resolution_status as current_status,
         loaded_at,
-        updated_at
+        last_updated_at
     from {{ source('raw', 'web_complaints') }}
 ),
 
@@ -110,9 +109,8 @@ current_lifecycle as (
 final as (
     select
         cb.complaint_key,
-        cb.complaint_id,
-        cb.customer_id,
-        cb.agent_id,
+        cb.customer_key,
+        cb.agent_key,
         cb.complaint_type,
         
         -- Milestone dates
@@ -146,13 +144,13 @@ final as (
             else null
         end as days_in_current_stage,
         
-        -- SLA flags (7-day resolution SLA)
+        -- sla 3 days
         case 
             when cl.current_status in ('resolved', 'closed')
-                and datediff('day', cl.created_date, cl.resolved_date) <= 7
+                and datediff('day', cl.created_date, cl.resolved_date) <= 3
             then 1
             when cl.current_status not in ('resolved', 'closed')
-                and datediff('day', cl.created_date, current_date()) > 7
+                and datediff('day', cl.created_date, current_date()) > 3
             then 0
             else null
         end as met_resolution_sla,

@@ -33,7 +33,8 @@ current_dim as (
         cast(null as integer) as is_active,
         cast(null as varchar) as state,
         cast(null as timestamp) as last_updated_at,
-        cast(null as timestamp) as loaded_at
+        cast(null as timestamp) as loaded_at,
+        cast(null as varchar) as created_at
     where false
 ),
 {% endif %}
@@ -47,6 +48,7 @@ changed_records as (
         s.state,
         s.last_updated_at,
         s.loaded_at,
+        s.created_at,
         d.agent_key as existing_key,
         d.experience as old_experience,
         case 
@@ -73,7 +75,8 @@ expired_records as (
         cast(0 as integer) as is_active,
         d.state,
         d.last_updated_at,
-        d.loaded_at
+        d.loaded_at,
+        d.created_at
     from current_dim d
     inner join changed_records c 
         on d.agent_id = c.agent_id 
@@ -87,12 +90,18 @@ new_versions as (
         agent_id,
         name,
         experience,
-        cast(current_date() as date) as experience_effective_date,
+        case 
+            when not {{ is_incremental() }}
+            --experience_expiry_date is necessary for type2 SCD logic, hence I hardcoded a random past date as effective date
+            then cast('2020-01-01' as date) 
+            else cast(current_date() as date)
+        end as experience_effective_date,
         cast(null as date) as experience_expiry_date,
         cast(1 as integer) as is_active,  
         state,
         last_updated_at,
-        loaded_at
+        loaded_at,
+        created_at
     from changed_records
     where change_type in ('NEW', 'CHANGED')
 ),
@@ -108,7 +117,8 @@ unchanged_records as (
         cast(d.is_active as integer) as is_active,
         d.state,
         d.last_updated_at,
-        d.loaded_at
+        d.loaded_at,
+        d.created_at
     from current_dim d
     inner join changed_records c 
         on d.agent_id = c.agent_id 

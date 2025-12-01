@@ -45,34 +45,36 @@ with
             null as media_channel,
             call_logs_generation_date as complaint_generation_date,
             last_updated_at,
+            created_at,
             loaded_at
         from call_logs_source
     ),
 
-    call_logs_dimension_keys as (
-        select
-            cl.complaint_key,
-            cl.complaint_id,
-            cust.customer_key,
-            agt.agent_key,
-            to_number(to_char(cl.complaint_date, 'YYYYMMDD')) as complaint_date_key,
-            cl.complaint_category,
-            cl.complaint_type,
-            cl.complaint_date,
-            cl.call_start_time,
-            cl.call_end_time,
-            cl.media_channel,
-            cl.complaint_generation_date,
-            cl.last_updated_at,
-            cl.loaded_at
-        from call_logs_transformed cl
-        left join {{ ref("dim_customers") }} cust on cl.customer_id = cust.customer_id
-        left join
-            {{ ref("dim_agents") }} agt
-            on cl.agent_id = agt.agent_id
+    call_logs_fct as (
+    select
+        cl.complaint_key,
+        cust.customer_key,
+        agt.agent_key,
+        to_number(to_char(cl.complaint_date, 'YYYYMMDD')) as complaint_date_key,
+        cl.complaint_category,
+        cl.complaint_type,
+        cl.complaint_date,
+        cl.call_start_time,
+        cl.call_end_time,
+        cl.media_channel,
+        cl.complaint_generation_date,
+        cl.last_updated_at,
+        cl.created_at,
+        cl.loaded_at
+    from call_logs_transformed cl
+    left join {{ ref("dim_customers") }} cust 
+        on cl.customer_id = cust.customer_id
+        and (cl.complaint_date <= cust.address_expiry_date or cust.is_active = 1)
+    left join {{ ref("dim_agents") }} agt
+        on cl.agent_id = agt.agent_id
             and cl.complaint_date >= agt.experience_effective_date
             and (cl.complaint_date <= agt.experience_expiry_date or agt.is_active = 1)
-    ),
+),
 
     sm_complaints_transformed as (
         select
@@ -88,14 +90,14 @@ with
             media_channel,
             media_complaint_generation_date as complaint_generation_date,
             last_updated_at,
+            created_at,
             loaded_at
         from sm_complaints_source
     ),
 
-    sm_complaint_dim_keys as (
+    sm_complaint_fct as (
         select
             sc.complaint_key,
-            sc.complaint_id,
             cust.customer_key,
             agt.agent_key,
             to_number(to_char(sc.complaint_date, 'YYYYMMDD')) as complaint_date_key,
@@ -107,6 +109,7 @@ with
             sc.media_channel,
             sc.complaint_generation_date,
             sc.last_updated_at,
+            sc.created_at,
             sc.loaded_at
         from sm_complaints_transformed sc
         left join {{ ref("dim_customers") }} cust on sc.customer_id = cust.customer_id
@@ -131,14 +134,14 @@ with
             null as media_channel,
             web_form_generation_date as complaint_generation_date,
             last_updated_at,
+            created_at,
             loaded_at
         from web_complaints_source
     ),
 
-    web_complaint_dim_keys as (
+    web_complaint_fct as (
         select
             wc.complaint_key,
-            wc.complaint_id,
             cust.customer_key,
             agt.agent_key,
             to_number(to_char(wc.complaint_date, 'YYYYMMDD')) as complaint_date_key,
@@ -150,6 +153,7 @@ with
             wc.media_channel,
             wc.complaint_generation_date,
             wc.last_updated_at,
+            wc.created_at,
             wc.loaded_at
         from web_complaints_transformed wc
         left join {{ ref("dim_customers") }} cust on wc.customer_id = cust.customer_id
@@ -161,11 +165,11 @@ with
     ),
 
     final as (
-        select * from call_logs_dimension_keys
+        select * from call_logs_fct
         union all
-        select * from sm_complaint_dim_keys
+        select * from sm_complaint_fct
         union all
-        select * from web_complaint_dim_keys
+        select * from web_complaint_fct
     )
 
 select * from final
