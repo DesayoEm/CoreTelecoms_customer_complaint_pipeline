@@ -6,20 +6,20 @@
 }}
 
 with complaint_sources as (
-    -- Get all complaints regardless of source
+    -- all complaints from sources
     select
         complaint_key,
-        complaint_id,
-        customer_id,
-        agent_id,
+        customer_key,
+        agent_key,
         complaint_date,
         complaint_type,
         last_updated_at,
-        loaded_at
+        loaded_at,
+        created_at
     from {{ ref('fact_complaint_transaction') }}
 ),
 
--- Get current status from raw (most recent state)
+
 call_logs_status as (
     select
         call_log_key as complaint_key,
@@ -55,7 +55,7 @@ all_statuses as (
     select * from web_complaints_status
 ),
 
--- Get latest status for each complaint
+
 latest_status as (
     select
         complaint_key,
@@ -76,25 +76,21 @@ current_status as (
     where rn = 1
 ),
 
--- Calculate age metrics
+--  days passed
 metrics as (
     select
         cs.complaint_key,
-        cs.complaint_id,
-        cs.customer_id,
-        cs.agent_id,
+        cs.customer_key,
+        cs.agent_key,
         cs.complaint_date,
         cs.complaint_type,
         
-        -- Snapshot metadata
+    
         current_date() as snapshot_date,
-        
-        -- Current status
         s.resolution_status,
         s.resolution_date,
         
-        -- Age metrics (as of snapshot date)
-        datediff('day', cs.complaint_date, current_date()) as days_since_creation,
+        datediff('day', cs.complaint_date, current_date()) as days_since_complaint,
         
         case 
             when s.resolution_status in ('resolved', 'closed') 
@@ -102,24 +98,24 @@ metrics as (
             else null
         end as days_to_resolution,
         
-        -- Status flags for aggregation
+        -- flags for aggregation
         case when s.resolution_status = 'open' then 1 else 0 end as is_open,
         case when s.resolution_status = 'assigned' then 1 else 0 end as is_assigned,
         case when s.resolution_status = 'in_progress' then 1 else 0 end as is_in_progress,
         case when s.resolution_status = 'resolved' then 1 else 0 end as is_resolved,
         case when s.resolution_status = 'closed' then 1 else 0 end as is_closed,
         
-        -- SLA flags (assuming 7-day SLA)
+        -- 3 day sla 
         case 
             when s.resolution_status not in ('resolved', 'closed') 
-                and datediff('day', cs.complaint_date, current_date()) > 7 
+                and datediff('day', cs.complaint_date, current_date()) > 3 
             then 1 
             else 0 
         end as is_overdue,
         
         case 
             when s.resolution_status in ('resolved', 'closed')
-                and datediff('day', cs.complaint_date, s.resolution_date) <= 7
+                and datediff('day', cs.complaint_date, s.resolution_date) <= 3
             then 1
             else 0
         end as met_sla,

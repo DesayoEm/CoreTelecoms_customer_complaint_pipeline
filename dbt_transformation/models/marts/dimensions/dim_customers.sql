@@ -40,7 +40,8 @@ current_dim as(
         cast(null as date) as address_expiry_date,
         cast(null as integer) as is_active,
         cast(null as varchar) as last_updated_at,
-        cast(null as varchar) as loaded_at
+        cast(null as varchar) as loaded_at,
+        cast(null as varchar) as created_at
     where false
 ),
 {% endif %}
@@ -59,6 +60,7 @@ changed_records as (
         s.state,
         s.last_updated_at,
         s.loaded_at,
+        s.created_at,
         d.customer_key as existing_key,
         d.address as old_address,
         d.zip_code as old_zip_code,
@@ -90,10 +92,11 @@ expired_records as(
         d.zip_code,
         d.state,
         d.address_effective_date,
-        current_date() -1 as address_expiry_date, -- must be expired previous day so as to avoid overlap
+        current_date() -1 as address_expiry_date,
         0 as is_active,
         d.last_updated_at,
-        d.loaded_at
+        d.loaded_at,
+        d.created_at
     from current_dim d
     inner join changed_records c
         on d.customer_id = c.customer_id 
@@ -112,11 +115,17 @@ new_versions as (
         address,
         zip_code,
         state,
-        current_date() as address_effective_date, 
+        case 
+        -- using signup date has address effective date for customer due to lack of historical record from source system
+            when not {{ is_incremental() }}
+            then cast(signup_date as date)
+            else cast(current_date() as date)
+        end as address_effective_date,
         null as address_expiry_date,  
         1 as is_active,  
         last_updated_at,
-        loaded_at
+        loaded_at,
+        created_at
     from changed_records
     where change_type in ('NEW', 'CHANGED')
 ),
@@ -140,8 +149,3 @@ final as (
     {% endif %}
 )
 select * from final
-
-
-
- 
-    
