@@ -21,6 +21,7 @@ log = LoggingMixin().log
 class SQLEXtractor:
     def __init__(self, context: Dict, s3_dest_hook: S3Hook = None):
         self.context = context
+        self.execution_date = self.context["ds"]
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
 
     def upload_dataframe_to_s3(
@@ -61,7 +62,7 @@ class SQLEXtractor:
                 "source_name": table_name,
                 "dag_id": self.context["dag"].dag_id,
                 "run_id": self.context["run_id"],
-                "execution_date": self.context["ds"],
+                "execution_date": self.execution_date,
             },
         }
 
@@ -86,11 +87,11 @@ class SQLEXtractor:
         return metadata
 
     def copy_web_complaints(self):
-        metadata = {"execution_date": self.context.get("ds")}
+        metadata = {"execution_date": self.execution_date}
         try:
             engine = create_engine(f"{config.SRC_DB_CONN_STRING}")
 
-            table_name = "Web_form_request_2025_11_20"
+            table_name = f"Web_form_request_{self.execution_date}".replace("-", "_")
             query = f"SELECT * FROM {config.SRC_DB_SCHEMA}.{table_name}"
 
             with engine.connect() as conn:
@@ -98,8 +99,7 @@ class SQLEXtractor:
 
             log.info(f"Extracted {len(df)} web complaints from table {table_name}")
 
-            current_execution_date = self.context.get("ds")
-            dest_key = f"{config.WEB_COMPLAINTS_STAGING_DEST}/{config.WEB_COMPLAINTS_OBJ_PREFIX}{current_execution_date}.parquet"
+            dest_key = f"{config.WEB_COMPLAINTS_STAGING_DEST}/{config.WEB_COMPLAINTS_OBJ_PREFIX}{self.execution_date}.parquet"
 
             conversion_result = self.upload_dataframe_to_s3(
                 df=df,

@@ -369,10 +369,16 @@ class Loader:
         execution_date = self.context["ds"]
         df["loaded_at"] = execution_date
         # to avoid pandas serializing timestamps to strings
-        if "created_at" in df.columns:
-            df["created_at"] = pd.to_datetime(df["created_at"]).astype(str)
-        if "last_updated_at" in df.columns:
-            df["last_updated_at"] = pd.to_datetime(df["last_updated_at"]).astype(str)
+        timestamp_cols = [
+            "last_updated_at",
+            "created_at",
+            "call_start_time",
+            "call_end_time",
+        ]
+        for col in timestamp_cols:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col]).astype(str)
+
         df.columns = [col.upper() for col in df.columns]
 
         with sf_hook.get_conn() as conn:

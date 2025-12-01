@@ -26,6 +26,7 @@ log = LoggingMixin().log
 class GoogleSheetsExtractor:
     def __init__(self, context: Dict, s3_dest_hook: S3Hook = None):
         self.context = context
+        self.execution_date = context.get("ds")
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
 
         service_account_info = self.get_google_credentials()
@@ -96,7 +97,7 @@ class GoogleSheetsExtractor:
                 "source_name": source_name,
                 "dag_id": self.context["dag"].dag_id,
                 "run_id": self.context["run_id"],
-                "execution_date": self.context["ds"],
+                "execution_date": self.execution_date,
             },
         }
 
@@ -122,7 +123,7 @@ class GoogleSheetsExtractor:
 
     def copy_agents_data(self) -> Dict[str, any]:
         """Extracts agent data from Google Sheets and uploads to S3."""
-        metadata = {"execution_date": self.context.get("ds")}
+        metadata = {"execution_date": self.execution_date}
 
         try:
             sheet_id = config.GOOGLE_SHEET_ID
@@ -134,9 +135,8 @@ class GoogleSheetsExtractor:
 
             log.info(f"Extracted {len(df)} agent records from Google Sheets")
 
-            current_execution_date = self.context.get("ds")
             dest_bucket = config.BRONZE_BUCKET
-            dest_key = f"{config.AGENT_DATA_STAGING_DEST}/{config.AGENT_DATA_OBJ_PREFIX}{current_execution_date}.parquet"
+            dest_key = f"{config.AGENT_DATA_STAGING_DEST}/{config.AGENT_DATA_OBJ_PREFIX}{self.execution_date}.parquet"
 
             conversion_result = self.upload_dataframe_to_s3(
                 df=df,

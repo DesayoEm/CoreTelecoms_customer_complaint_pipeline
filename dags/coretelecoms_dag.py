@@ -20,8 +20,8 @@ from airflow.utils.log.logging_mixin import LoggingMixin
 log = LoggingMixin().log
 
 default_args = {
-    # "retries": 2,
-    # "retry_delay": 10,
+    "retries": 2,
+    "retry_delay": 5,
     "on_success_callback": success_notification,
     "on_failure_callback": failure_notification,
 }
@@ -29,7 +29,9 @@ default_args = {
 
 @dag(
     dag_id="coretelecoms_dag",
-    start_date=datetime(2025, 11, 19),
+    start_date=datetime(2025, 11, 20),
+    end_date=datetime(2025, 11, 23),
+    max_active_runs=1,
     catchup=False,
     schedule=None,
     default_args=default_args,

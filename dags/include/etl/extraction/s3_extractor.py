@@ -25,6 +25,7 @@ class S3Extractor:
         self, context: Dict, s3_src_hook: S3Hook = None, s3_dest_hook: S3Hook = None
     ):
         self.context = context
+        self.execution_date = context.get("ds")
         self.s3_src_hook = s3_src_hook or S3Hook(aws_conn_id="aws_airflow_src_user")
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
 
@@ -33,7 +34,7 @@ class S3Extractor:
     ) -> Dict[str, any]:
         """Copies data from source S3 to destination S3."""
 
-        metadata = {"execution_date": self.context.get("ds")}
+        metadata = {"execution_date": self.execution_date}
         src_bucket = config.SRC_BUCKET_NAME
 
         try:
@@ -43,12 +44,9 @@ class S3Extractor:
                 key=src_key, bucket_name=src_bucket
             )
 
-            current_execution_date = self.context.get("ds")
             dest_bucket = config.BRONZE_BUCKET
 
-            full_dest_key = (
-                f"{dest_prefix}/{obj_prefix}-{current_execution_date}.parquet"
-            )
+            full_dest_key = f"{dest_prefix}/{obj_prefix}-{self.execution_date}.parquet"
 
             conversion_result = self.convert_and_upload_to_s3(
                 data=file_content,
@@ -104,7 +102,7 @@ class S3Extractor:
 
             log.info(f"Successfully saved to s3://{dest_bucket}/{dest_key}")
             metadata = {
-                "execution_date": self.context["ds"],
+                "execution_date": self.execution_date,
                 "dest_bucket": dest_bucket,
                 "dest_key": dest_key,
                 "file_size_bytes": len(bytes_data),
@@ -153,7 +151,7 @@ class S3Extractor:
                 "dag_id": self.context["dag"].dag_id,
                 "run_id": self.context["run_id"],
                 "actual_date": datetime.today().strftime("%Y-%m-%d"),
-                "execution_date": self.context["ds"],
+                "execution_date": self.execution_date,
             },
         }
 
@@ -195,7 +193,9 @@ class S3Extractor:
     def copy_call_log_data(self) -> Dict[str, any]:
         """Copies call logs from source S3 to destination S3."""
         return self.copy_data(
-            src_key="call logs/call_logs_day_2025-11-20.csv",
+            src_key=f"call logs/call_logs_day_{self.execution_date}.csv".replace(
+                "-", "_"
+            ),
             dest_prefix=config.CALL_LOGS_STAGING_DEST,
             obj_prefix=config.CALL_LOGS_OBJ_PREFIX,
             obj_type="call logs",
@@ -204,7 +204,9 @@ class S3Extractor:
     def copy_social_media_complaint_data(self) -> Dict[str, any]:
         """Copies social media complaints from source S3 to destination S3."""
         return self.copy_data(
-            src_key="social_medias/media_complaint_day_2025-11-20.json",  # deterministic key to be configured
+            src_key=f"social_medias/media_complaint_day_{self.execution_date}.json".replace(
+                "-", "_"
+            ),
             dest_prefix=config.SM_COMPLAINTS_STAGING_DEST,
             obj_prefix=config.SM_COMPLAINTS_OBJ_PREFIX,
             obj_type="social media complaints",
