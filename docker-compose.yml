@@ -67,15 +67,11 @@ x-airflow-common:
     SRC_SM_COMPLAINTS_OBJ_KEY: ${SRC_SM_COMPLAINTS_OBJ_KEY}
 
 
-
-
-
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
-    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
-    - ${AIRFLOW_DATA_DIR:-.}/data:/opt/airflow/data
+#    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on

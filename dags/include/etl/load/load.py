@@ -93,7 +93,7 @@ class LoadStateHandler:
 
         try:
             Variable.delete(checkpoint_key)
-            log.info(f"✓ Checkpoint cleared - Key: {checkpoint_key}")
+            log.info(f"Checkpoint cleared - Key: {checkpoint_key}")
         except KeyError:
             log.info(f"○ No checkpoint to clear for key: {checkpoint_key}")
 
@@ -176,14 +176,13 @@ class Loader:
             text(
                 f"""
                INSERT INTO {target_table}
-               SELECT s.*
-               FROM {staging_table} s
+               SELECT s.*  FROM {staging_table} s
                INNER JOIN conformed_customers c ON s.customer_id = c.customer_id
                INNER JOIN conformed_agents a ON s.agent_id = a.agent_id
-               ON CONFLICT (complaint_id) DO UPDATE SET
+               ON CONFLICT (sm_complaint_key) DO UPDATE SET
                    resolution_status = EXCLUDED.resolution_status,
-                   resolution_date = EXCLUDED.resolution_date,
-                   last_updated_at = CURRENT_TIMESTAMP
+                   last_updated_at = CURRENT_TIMESTAMP,
+                   created_at = {target_table}.created_at
            """
             )
         )
@@ -223,14 +222,13 @@ class Loader:
             text(
                 f"""
                INSERT INTO {target_table}
-               SELECT s.*
-               FROM {staging_table} s
+               SELECT s.* FROM {staging_table} s
                INNER JOIN conformed_customers c ON s.customer_id = c.customer_id
                INNER JOIN conformed_agents a ON s.agent_id = a.agent_id
-               ON CONFLICT (request_id) DO UPDATE SET
+               ON CONFLICT (web_complaint_key) DO UPDATE SET
                    resolution_status = EXCLUDED.resolution_status,
-                   resolution_date = EXCLUDED.resolution_date,
-                   last_updated_at = CURRENT_TIMESTAMP
+                   last_updated_at = CURRENT_TIMESTAMP,
+                   created_at = {target_table}.created_at
            """
             )
         )
@@ -270,13 +268,13 @@ class Loader:
             text(
                 f"""
                INSERT INTO {target_table}
-               SELECT s.*
-               FROM {staging_table} s
+               SELECT s.*  FROM {staging_table} s
                INNER JOIN conformed_customers c ON s.customer_id = c.customer_id
                INNER JOIN conformed_agents a ON s.agent_id = a.agent_id
-               ON CONFLICT (call_id) DO UPDATE SET
+               ON CONFLICT (call_log_key) DO UPDATE SET
                    resolution_status = EXCLUDED.resolution_status,
-                   last_updated_at = CURRENT_TIMESTAMP
+                   last_updated_at = CURRENT_TIMESTAMP,
+                   created_at = {target_table}.created_at
            """
             )
         )
@@ -302,7 +300,8 @@ class Loader:
                     zip_code = EXCLUDED.zip_code,
                     state_code = EXCLUDED.state_code,
                     state = EXCLUDED.state,
-                    last_updated_at = CURRENT_TIMESTAMP
+                    last_updated_at = CURRENT_TIMESTAMP, 
+                    created_at = {target_table}.created_at
             """
             )
         )
@@ -316,10 +315,13 @@ class Loader:
                 f"""
                 INSERT INTO {target_table}
                 SELECT * FROM {staging_table}
-                ON CONFLICT (agent_id)
+                ON CONFLICT (agent_key) 
                 DO UPDATE SET
                     experience = EXCLUDED.experience,
-                    last_updated_at = CURRENT_TIMESTAMP
+                    name = EXCLUDED.name,
+                    state = EXCLUDED.state,
+                    last_updated_at = CURRENT_TIMESTAMP,
+                    created_at = {target_table}.created_at
                 """
             )
         )
