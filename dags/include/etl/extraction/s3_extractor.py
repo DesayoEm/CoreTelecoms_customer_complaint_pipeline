@@ -194,9 +194,7 @@ class S3Extractor:
     def copy_call_log_data(self) -> Dict[str, any]:
         """Copies call logs from source S3 to destination S3."""
         return self.copy_data(
-            src_key=f"call logs/call_logs_day_{self.execution_date}.csv".replace(
-                "-", "_"
-            ),
+            src_key=f"call logs/call_logs_day_{self.execution_date}.csv",
             dest_prefix=config.CALL_LOGS_STAGING_DEST,
             obj_prefix=config.CALL_LOGS_OBJ_PREFIX,
             obj_type="call logs",
@@ -205,9 +203,7 @@ class S3Extractor:
     def copy_social_media_complaint_data(self) -> Dict[str, any]:
         """Copies social media complaints from source S3 to destination S3."""
         return self.copy_data(
-            src_key=f"social_medias/media_complaint_day_{self.execution_date}.json".replace(
-                "-", "_"
-            ),
+            src_key=f"social_medias/media_complaint_day_{self.execution_date}.json",
             dest_prefix=config.SM_COMPLAINTS_STAGING_DEST,
             obj_prefix=config.SM_COMPLAINTS_OBJ_PREFIX,
             obj_type="social media complaints",

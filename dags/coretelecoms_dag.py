@@ -1,6 +1,7 @@
 from airflow.sdk import dag, task
+from typing import Dict
 from airflow.models import Variable
-from pendulum import datetime
+from pendulum import datetime, duration
 from airflow.sdk.definitions.context import get_current_context
 from include.etl.extraction.s3_extractor import S3Extractor
 from include.etl.extraction.google_extractor import GoogleSheetsExtractor
@@ -21,7 +22,7 @@ log = LoggingMixin().log
 
 default_args = {
     "retries": 2,
-    "retry_delay": 5,
+    "retry_delay": duration(minutes=5),
     "on_success_callback": success_notification,
     "on_failure_callback": failure_notification,
 }
@@ -32,8 +33,8 @@ default_args = {
     start_date=datetime(2025, 11, 20),
     end_date=datetime(2025, 11, 23),
     max_active_runs=1,
-    catchup=False,
-    schedule=None,
+    catchup=True,
+    schedule="@daily",
     default_args=default_args,
     tags=["coretelecoms"],
 )
@@ -45,7 +46,7 @@ def process_complaint_data():
         is_first_run = Variable.get("coretelecoms_first_run", default_var="true")
 
         if is_first_run.lower() == "true":
-            log.info("First run - must load static data before gate opens")
+            log.info("First run - agents and customers must load before gate opens")
             return [
                 "ingest_customer_data_task",
                 "ingest_agents_data_task",
@@ -54,18 +55,6 @@ def process_complaint_data():
         else:
             log.info("Subsequent run - gate opens immediately")
             return ["static_data_gate"]
-
-    @task
-    def static_data_gate():
-        """
-        Gate that controls when complaints can be processed.
-        On first run: only runs AFTER customers/agents are loaded
-        On subsequent runs: runs immediately
-        """
-        # DUE TO FK CONSTRAINTS, COMPLAINTS MUST NOT LOAD UNTIL THE GATE TASK IS SUCCESSFUL
-        # i.e until customers and agents have been processed
-        log.info("Static data gate OPEN. Complaints can now be processed")
-        return True
 
     @task
     def mark_first_run_complete():
@@ -80,29 +69,41 @@ def process_complaint_data():
         )
 
     # STATIC TASKS - ONLY RUN ON START DATE
-    @task
+    @task(task_id="ingest_customer_data_task")
     def ingest_customer_data_task():
         context = get_current_context()
         extractor = S3Extractor(context=context)
         return extractor.copy_customers_data()
 
-    @task
+    @task(task_id="ingest_agents_data_task")
     def ingest_agents_data_task():
         context = get_current_context()
         extractor = GoogleSheetsExtractor(context=context)
         return extractor.copy_agents_data()
 
     @task
-    def transform_and_load_customers_task(metadata):
+    def transform_customers_task(metadata: Dict):
         context = get_current_context()
         transformer = Transformer(context=context)
         return transformer.transform_entity(metadata["destination"], "customers")
 
     @task
-    def transform_and_load_agents_task(metadata):
+    def transform_agents_task(metadata: Dict):
         context = get_current_context()
         transformer = Transformer(context=context)
         return transformer.transform_entity(metadata["destination"], "agents")
+
+    @task(task_id="static_data_gate", trigger_rule="all_success")
+    def static_data_gate():
+        """
+        Gate that controls when complaints can be processed.
+        On first run: only runs AFTER customers/agents are loaded
+        On subsequent runs: runs immediately
+        """
+        # DUE TO FK CONSTRAINTS, COMPLAINTS MUST NOT LOAD UNTIL THE GATE TASK IS SUCCESSFUL
+        # i.e until customers and agents have been processed
+        log.info("Static data gate OPEN. Complaints can now be processed")
+        return True
 
     @task
     def load_customers_task():
@@ -143,25 +144,25 @@ def process_complaint_data():
         return create_all_tables()
 
     @task
-    def truncate_staging_tables_task():
+    def truncate_conformance_staging_tables_task():
         return truncate_staging_tables()
 
     @task
-    def transform_call_logs_task(metadata):
+    def transform_call_logs_task(metadata: Dict):
         context = get_current_context()
         transformer = Transformer(context=context)
 
         return transformer.transform_entity(metadata["destination"], "call logs")
 
     @task
-    def transform_sm_task(metadata):
+    def transform_sm_task(metadata: Dict):
         context = get_current_context()
         transformer = Transformer(context=context)
 
         return transformer.transform_entity(metadata["destination"], "sm complaints")
 
     @task
-    def transform_web_task(metadata):
+    def transform_web_task(metadata: Dict):
         context = get_current_context()
         transformer = Transformer(context=context)
 
@@ -185,7 +186,7 @@ def process_complaint_data():
         loader = Loader(context=context)
         return loader.load_tables_to_snowflake(entity_type="web complaints")
 
-    @task(trigger_rule="none_failed_min_one_success")
+    @task(trigger_rule="all_success")
     def cleanup_checkpoints_task():
         """Clear all checkpoints after successful DAG run."""
         context = get_current_context()
@@ -193,7 +194,7 @@ def process_complaint_data():
 
     # BRANCH RUNS IN ALL CASES AND DETERMINES DOWNSTREAM PATH
     tables = create_all_tables_task()
-    clear_staging = truncate_staging_tables_task()
+    clear_staging = truncate_conformance_staging_tables_task()
     branch = determine_load_type()
 
     tables >> clear_staging >> branch
@@ -201,47 +202,42 @@ def process_complaint_data():
     # IF BRANCH determine_load_type DETERMINES THAT STATIC PATH MUST RUN
     raw_customer_data = ingest_customer_data_task()
     raw_agents_data = ingest_agents_data_task()
+    mark_complete = mark_first_run_complete()
+    open_gate = static_data_gate()
 
     branch >> [raw_customer_data, raw_agents_data]
 
-    transform_customers = transform_and_load_customers_task(raw_customer_data)
-    transform_agents = transform_and_load_agents_task(raw_agents_data)
+    transform_customers = transform_customers_task(raw_customer_data)
+    transform_agents = transform_agents_task(raw_agents_data)
 
     load_customers_wh = load_customers_task()
     load_agents_wh = load_agents_task()
 
-    transform_customers >> load_customers_wh
-    transform_agents >> load_agents_wh
+    [transform_customers, transform_agents] >> mark_complete
+    mark_complete >> [load_customers_wh, load_agents_wh]
 
-    mark_complete = mark_first_run_complete()
-    [load_customers_wh, load_agents_wh] >> mark_complete
-
-    # GATE SETUP
-    gate = static_data_gate()
-    mark_complete >> gate
-    branch >> gate
+    # GATE OPEN AFTER BRANCH IS RESOLVED
+    branch >> open_gate
 
     # COMPLAINT INGESTION CAN RUN INDEPENDENTLY
     raw_call_logs = ingest_call_logs_task()
     raw_sm_complaints = ingest_sm_complaints_task()
     raw_web_complaints = ingest_web_complaints_data_task()
 
-    branch >> [raw_call_logs, raw_sm_complaints, raw_web_complaints]
-
-    # COMPLAINTS CAN ONLY BE TRANSFORMED AFTER GATE OPENS
     transform_call_logs = transform_call_logs_task(raw_call_logs)
     transform_sm = transform_sm_task(raw_sm_complaints)
     transform_web = transform_web_task(raw_web_complaints)
 
-    gate >> [transform_call_logs, transform_sm, transform_web]
+    # COMPLAINTS CAN ONLY BE TRANSFORMED AFTER GATE OPENS
+    open_gate >> [transform_call_logs, transform_sm, transform_web]
 
     load_call_logs = load_call_logs_task()
     load_sm = load_sm_complaints_task()
     load_web = load_web_complaints_task()
 
-    transform_call_logs_task >> load_call_logs
-    transform_sm_task >> load_sm
-    transform_web_task >> load_web
+    transform_call_logs >> load_call_logs
+    transform_sm >> load_sm
+    transform_web >> load_web
 
     cleanup = cleanup_checkpoints_task()
     [load_call_logs, load_sm, load_web] >> cleanup

@@ -386,7 +386,7 @@ class Loader:
             cursor.execute(
                 f"""
                 DELETE FROM CORETELECOMS_DB.STG.{table_name.upper()}
-                WHERE loaded_at = '{execution_date}'
+                WHERE loaded_at = '{self.execution_date}'
             """
             )
 
