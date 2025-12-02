@@ -11,7 +11,7 @@
 ) is not none %}
 
 with agents_source as (
-    select * from {{ source('raw', 'agents') }}
+    select * from {{ source('stg', 'agents') }}
 ),
 
 {% if relation_exists %}

@@ -15,7 +15,7 @@ models:
         tests:
           - not_null
           - relationships:
-              to: source('raw', 'customers')
+              to: source('stg', 'customers')
               field: customer_id
       
       - name: customer_id_active
@@ -76,7 +76,7 @@ models:
         tests:
           - not_null
           - relationships:
-              to: source('raw', 'agents')
+              to: source('stg', 'agents')
               field: agent_id
       
       - name: agent_id_active

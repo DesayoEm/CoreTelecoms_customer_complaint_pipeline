@@ -31,7 +31,7 @@ call_logs_lifecycle as (
         resolution_status as current_status,
         loaded_at,
         last_updated_at
-    from {{ source('raw', 'call_logs') }}
+    from {{ source('stg', 'call_logs') }}
 ),
 
 sm_complaints_lifecycle as (
@@ -49,7 +49,7 @@ sm_complaints_lifecycle as (
         resolution_status as current_status,
         loaded_at,
         last_updated_at
-    from {{ source('raw', 'sm_complaints') }}
+    from {{ source('stg', 'sm_complaints') }}
 ),
 
 web_complaints_lifecycle as (
@@ -67,7 +67,7 @@ web_complaints_lifecycle as (
         resolution_status as current_status,
         loaded_at,
         last_updated_at
-    from {{ source('raw', 'web_complaints') }}
+    from {{ source('stg', 'web_complaints') }}
 ),
 
 all_lifecycle as (
