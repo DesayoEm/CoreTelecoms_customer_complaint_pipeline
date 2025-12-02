@@ -9,7 +9,7 @@
 with
     call_logs_source as (
         select *
-        from {{ source("raw", "call_logs") }}
+        from {{ source("stg", "call_logs") }}
         {% if is_incremental() %}
             where last_updated_at > (select max(last_updated_at) from {{ this }})
         {% endif %}
@@ -17,7 +17,7 @@ with
 
     sm_complaints_source as (
         select *
-        from {{ source("raw", "sm_complaints") }}
+        from {{ source("stg", "sm_complaints") }}
         {% if is_incremental() %}
             where last_updated_at > (select max(last_updated_at) from {{ this }})
         {% endif %}
@@ -25,7 +25,7 @@ with
 
     web_complaints_source as (
         select *
-        from {{ source("raw", "web_complaints") }}
+        from {{ source("stg", "web_complaints") }}
         {% if is_incremental() %}
             where last_updated_at > (select max(last_updated_at) from {{ this }})
         {% endif %}
