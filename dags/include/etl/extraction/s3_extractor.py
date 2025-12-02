@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 import pandas as pd
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.utils.context import Context
 
 
 from include.config import config
@@ -22,7 +23,7 @@ log = LoggingMixin().log
 
 class S3Extractor:
     def __init__(
-        self, context: Dict, s3_src_hook: S3Hook = None, s3_dest_hook: S3Hook = None
+        self, context: Context, s3_src_hook: S3Hook = None, s3_dest_hook: S3Hook = None
     ):
         self.context = context
         self.execution_date = context.get("ds")

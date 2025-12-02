@@ -1,9 +1,10 @@
 from typing import Dict
+from airflow.utils.context import Context
 from airflow.providers.slack.notifications.slack import SlackNotifier
 
 
 def persist_ingestion_metadata_before_failure(
-    error: Exception, context: Dict, metadata: Dict
+    error: Exception, context: Context, metadata: Dict
 ) -> None:
     info = {
         "task": context["task_instance"].task_id,

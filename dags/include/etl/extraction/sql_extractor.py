@@ -6,6 +6,7 @@ import io
 import json
 from datetime import datetime
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.utils.context import Context
 
 from include.config import config
 from include.notifications.failure_middleware import (
@@ -19,7 +20,7 @@ log = LoggingMixin().log
 
 
 class SQLEXtractor:
-    def __init__(self, context: Dict, s3_dest_hook: S3Hook = None):
+    def __init__(self, context: Context, s3_dest_hook: S3Hook = None):
         self.context = context
         self.execution_date = self.context["ds"]
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")

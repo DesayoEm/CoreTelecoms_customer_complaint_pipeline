@@ -1,5 +1,5 @@
 from airflow.providers.slack.notifications.slack import SlackNotifier
-from typing import Dict
+from airflow.utils.context import Context
 
 
 def success_notification(context):
@@ -31,7 +31,7 @@ def failure_notification(context):
 
 
 def notify_batch_already_complete(
-    context: Dict, start_batch: int, batches_to_run: int, task_id: str
+    context: Context, start_batch: int, batches_to_run: int, task_id: str
 ):
     details = (
         f"ALERT: {task_id} for CoreTelecoms for {context['ds']} ALREADY SUCCEEDED\n\n"

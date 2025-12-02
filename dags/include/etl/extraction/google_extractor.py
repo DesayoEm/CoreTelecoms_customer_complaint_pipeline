@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 import pandas as pd
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.utils.context import Context
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -24,7 +25,7 @@ log = LoggingMixin().log
 
 
 class GoogleSheetsExtractor:
-    def __init__(self, context: Dict, s3_dest_hook: S3Hook = None):
+    def __init__(self, context: Context, s3_dest_hook: S3Hook = None):
         self.context = context
         self.execution_date = context.get("ds")
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")

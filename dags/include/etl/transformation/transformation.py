@@ -15,6 +15,7 @@ from include.etl.load.load import LoadStateHandler
 from include.exceptions.exceptions import DataLoadError
 from include.notifications.notifications import notify_batch_already_complete
 
+from airflow.utils.context import Context
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.utils.log.logging_mixin import LoggingMixin
 
@@ -22,7 +23,7 @@ log = LoggingMixin().log
 
 
 class Transformer:
-    def __init__(self, context: Dict, s3_dest_hook: S3Hook = None):
+    def __init__(self, context: Context, s3_dest_hook: S3Hook = None):
         self.context = context
         self.s3_dest_hook = s3_dest_hook or S3Hook(aws_conn_id="aws_airflow_dest_user")
         self.cleaner = Cleaner()
@@ -125,7 +126,7 @@ class Transformer:
         """Move key column to first position"""
         return df[[key_col] + [col for col in df.columns if col != key_col]]
 
-    def transform_and_load_entity(self, entity_data_location: str, entity_type: str):
+    def transform_entity(self, entity_data_location: str, entity_type: str):
         """Transform and load at once or in batches"""
         try:
             entity_df = pd.read_parquet(entity_data_location)

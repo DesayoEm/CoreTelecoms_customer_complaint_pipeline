@@ -1,4 +1,3 @@
-from typing import Dict
 import json
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -8,6 +7,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
 from snowflake.connector.pandas_tools import write_pandas
 from airflow.models import Variable
+from airflow.utils.context import Context
 from include.config import config
 from airflow.utils.log.logging_mixin import LoggingMixin
 
@@ -17,8 +17,9 @@ log = LoggingMixin().log
 class LoadStateHandler:
     """Loads checkpoint state from Airflow XCom."""
 
-    def __init__(self, context: Dict):
+    def __init__(self, context: Context):
         self.context = context
+        self.execution_date = self.context.get("ds")
 
     def determine_starting_point(self) -> int:
         """
@@ -30,8 +31,7 @@ class LoadStateHandler:
             log.info("First run. Starting fresh load")
             return 0
 
-        current_execution_date = self.context.get("ds")
-        checkpoint_key = f"{ti.task_id}_{current_execution_date}"
+        checkpoint_key = f"{ti.task_id}_{self.execution_date}"
         try:
             checkpoint_json = Variable.get(checkpoint_key)
             checkpoint = json.loads(checkpoint_json)
@@ -72,24 +72,23 @@ class LoadStateHandler:
         Overwrites previous run for same task_id + execution_date.
         """
         ti = self.context.get("task_instance")
-        current_execution_date = self.context.get("ds")
-        checkpoint_key = f"{ti.task_id}_{current_execution_date}"
+        checkpoint_key = f"{ti.task_id}_{self.execution_date}"
         checkpoint_value = {
             "last_completed_batch": batch_num,
             "rows_loaded": rows_loaded,
-            "date": current_execution_date,
+            "date": self.execution_date,
         }
         Variable.set(checkpoint_key, json.dumps(checkpoint_value))
         log.info(
             f"Checkpoint saved - Key: {checkpoint_key}, Batch: {batch_num}, Rows: {rows_loaded}"
         )
 
-    def clear_checkpoints(self, context: Dict):
+    def clear_checkpoints(self, context: Context):
         """
         Manually clear checkpoint
         """
         ti = context["task_instance"]
-        checkpoint_key = f"{ti.task_id}_{context['ds']}"
+        checkpoint_key = f"{self.execution_date}"
 
         try:
             Variable.delete(checkpoint_key)
@@ -101,8 +100,9 @@ class LoadStateHandler:
 class Loader:
     """Handles loading transformed data to destination with checkpoint support."""
 
-    def __init__(self, context: Dict, s3_dest_hook=None):
+    def __init__(self, context: Context, s3_dest_hook=None):
         self.context = context
+        self.execution_date = self.context.get("ds")
         self.engine = create_engine(
             config.SILVER_DB_CONN_STRING,
             isolation_level="AUTOCOMMIT",
@@ -345,11 +345,11 @@ class Loader:
             "lineage": {
                 "dag_id": self.context["dag"].dag_id,
                 "run_id": self.context["run_id"],
-                "execution_date": self.context["ds"],
+                "execution_date": self.execution_date,
             },
         }
 
-        manifest_key = f"load-manifests/{entity_type}/{entity_type}-{self.context['ds']}-manifest.json"
+        manifest_key = f"load-manifests/{entity_type}/{entity_type}-{self.execution_date}-manifest.json"
         self.s3_dest_hook.load_string(
             string_data=json.dumps(manifest, indent=2),
             key=manifest_key,
@@ -366,8 +366,7 @@ class Loader:
         sf_hook = SnowflakeHook("snowflake")
         df = pg_hook.get_pandas_df(f"SELECT * FROM conformed_{table_name}")
 
-        execution_date = self.context["ds"]
-        df["loaded_at"] = execution_date
+        df["loaded_at"] = self.execution_date
         # to avoid pandas serializing timestamps to strings
         timestamp_cols = [
             "last_updated_at",
