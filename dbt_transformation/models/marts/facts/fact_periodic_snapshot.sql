@@ -26,7 +26,7 @@ call_logs_status as (
         resolution_status,
         call_end_time as resolution_date,
         loaded_at as snapshot_date
-    from {{ source('raw', 'call_logs') }}
+    from {{ source('stg', 'call_logs') }}
 ),
 
 sm_complaints_status as (
@@ -35,7 +35,7 @@ sm_complaints_status as (
         resolution_status,
         resolution_date,
         loaded_at as snapshot_date
-    from {{ source('raw', 'sm_complaints') }}
+    from {{ source('stg', 'sm_complaints') }}
 ),
 
 web_complaints_status as (
@@ -44,7 +44,7 @@ web_complaints_status as (
         resolution_status,
         resolution_date,
         loaded_at as snapshot_date
-    from {{ source('raw', 'web_complaints') }}
+    from {{ source('stg', 'web_complaints') }}
 ),
 
 all_statuses as (

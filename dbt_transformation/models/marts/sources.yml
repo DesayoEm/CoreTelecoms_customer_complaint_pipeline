@@ -1,9 +1,9 @@
 version: 1.0.0
 
 sources:
-  - name: raw
+  - name: stg
     description: Staging tables in Snowflake
-    schema: raw
+    schema: stg
     tables:
       - name: customers
         identifier: CUSTOMERS
@@ -21,7 +21,7 @@ sources:
             count: 24
             period: hour
           error_after:
-            count: 60 #to fix
+            count: 25
             period: hour
           
           

@@ -12,7 +12,7 @@
 
 
 with customers_source as (
-    select * from {{ source('raw', 'customers') }}
+    select * from {{ source('stg', 'customers') }}
 ),
 
 {% if relation_exists %}
