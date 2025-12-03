@@ -1,0 +1,57 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: "SCD Type 2 customer dimension tracking address changes over time"
+    tests:
+    - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - customer_id
+            - is_active
+          where: "is_active = 1"
+          
+    - dbt_utils.expression_is_true:
+          name: active_records_have_no_expiry
+          arguments:
+            expression: "case when is_active = 1 then address_expiry_date is null else address_expiry_date is not null end"
+          
+    columns:
+      - name: customer_key
+        description: "Surrogate key (SHA-256 hash) - unique per version"
+        tests:
+          - unique
+          - not_null
+
+      - name: customer_id
+        description: "Business key from source system"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('stg', 'customers')
+                field: customer_id
+  
+      - name: email
+        description: "Customer email address"
+        tests:
+          - not_null
+
+      - name: address_effective_date
+        description: "When this address version became effective"
+        tests:
+          - not_null
+
+      - name: address_expiry_date
+        description: "When this address version expired (NULL if active)"
+      - name: is_active
+        description: "Flag indicating current version"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: signup_date
+        description: "When customer first signed up"
+        tests:
+          - not_null
+

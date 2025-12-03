@@ -1,0 +1,53 @@
+version: 2
+
+models:
+  - name: dim_agents
+    description: "SCD Type 2 agent dimension tracking experience level changes over time"
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - agent_id
+            - is_active
+          where: "is_active = 1"
+
+      - dbt_utils.expression_is_true:
+          expression: "experience_effective_date <= coalesce(experience_expiry_date, current_date())"
+          where: "experience_expiry_date is not null"
+
+    columns:
+      - name: agent_key
+        description: "Surrogate key (SHA-256 hash) - unique per version"
+        tests:
+          - unique
+          - not_null
+
+      - name: agent_id
+        description: "Business key from source system"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('stg', 'agents')
+                field: agent_id
+      
+      - name: experience
+        description: "Agent experience level (Junior, Intermediate, Senior)"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['Junior', 'Intern', 'Senior', 'Mid-Level']
+      - name: experience_effective_date
+        description: "When this experience level became effective"
+        tests:
+          - not_null
+
+      - name: is_active
+        description: "Flag indicating current version"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+   

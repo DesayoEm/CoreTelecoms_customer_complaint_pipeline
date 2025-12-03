@@ -1,0 +1,27 @@
+version: 2
+
+models:
+   
+  - name: dim_date
+    description: "Date dimension for time-based analysis"
+    columns:
+      - name: date_day
+        description: "Primary date key"
+        tests:
+          - unique
+          - not_null
+
+      - name: day_of_week
+        description: "Day of week (1-7)"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7]
+      - name: month_of_year
+        description: "Month number (1-12)"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
