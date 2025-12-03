@@ -1,6 +1,6 @@
 {{
     config(
-        materialized='table',
+        materialized='incremental',
         schema='analytics',
         unique_key='complaint_key'
     )
@@ -10,141 +10,61 @@ with complaint_base as (
     select
         complaint_key,
         customer_key,
+        complaint_date_key,
         agent_key,
-        complaint_date,
         complaint_type
-    from {{ ref('fact_complaint_transaction') }}
+    from {{ ref('fact_unified_complaint') }}
 ),
 
-call_logs_lifecycle as (
+date_enriched as (
     select
-        call_log_key as complaint_key,
-        request_date as created_date,
-        case when resolution_status in ('assigned', 'in_progress', 'resolved', 'closed') 
-            then request_date end as assigned_date,
-        case when resolution_status in ('in_progress', 'resolved', 'closed') 
-            then request_date end as in_progress_date,
-        case when resolution_status in ('resolved', 'closed') 
-            then call_end_time end as resolved_date,
-        case when resolution_status = 'closed' 
-            then call_end_time end as closed_date,
-        resolution_status as current_status,
-        loaded_at,
-        last_updated_at
-    from {{ source('stg', 'call_logs') }}
-),
-
-sm_complaints_lifecycle as (
-    select
-        sm_complaint_key as complaint_key,
-        request_date as created_date,
-        case when resolution_status in ('assigned', 'in_progress', 'resolved', 'closed') 
-            then request_date end as assigned_date,
-        case when resolution_status in ('in_progress', 'resolved', 'closed') 
-            then request_date end as in_progress_date,
-        case when resolution_status in ('resolved', 'closed') 
-            then resolution_date end as resolved_date,
-        case when resolution_status = 'closed' 
-            then resolution_date end as closed_date,
-        resolution_status as current_status,
-        loaded_at,
-        last_updated_at
-    from {{ source('stg', 'sm_complaints') }}
-),
-
-web_complaints_lifecycle as (
-    select
-        web_complaint_key as complaint_key,
-        request_date as created_date,
-        case when resolution_status in ('assigned', 'in_progress', 'resolved', 'closed') 
-            then request_date end as assigned_date,
-        case when resolution_status in ('in_progress', 'resolved', 'closed') 
-            then request_date end as in_progress_date,
-        case when resolution_status in ('resolved', 'closed') 
-            then resolution_date end as resolved_date,
-        case when resolution_status = 'closed' 
-            then resolution_date end as closed_date,
-        resolution_status as current_status,
-        loaded_at,
-        last_updated_at
-    from {{ source('stg', 'web_complaints') }}
-),
-
-all_lifecycle as (
-    select * from call_logs_lifecycle
-    union all
-    select * from sm_complaints_lifecycle
-    union all
-    select * from web_complaints_lifecycle
-),
-
-
-latest_lifecycle as (
-    select
-        complaint_key,
-        created_date,
-        assigned_date,
-        in_progress_date,
-        resolved_date,
-        closed_date,
-        current_status,
-        row_number() over (partition by complaint_key order by loaded_at desc) as rn
-    from all_lifecycle
+        cb.*,
+        d.date_day as full_date,
+        d.day_of_week,
+    from complaint_base cb
+    left join coretelecoms_db.analytics.dim_date d
+        on cb.complaint_date_key = d.date_key
 ),
 
 current_lifecycle as (
+    -- Dummy placeholder CTE to allow compilation
     select
         complaint_key,
-        created_date,
-        assigned_date,
-        in_progress_date,
-        resolved_date,
-        closed_date,
-        current_status
-    from latest_lifecycle
-    where rn = 1
+        'open'::string as current_status,
+        current_date() as created_date,
+        current_date() as assigned_date,
+        current_date() as in_progress_date,
+        current_date() as resolved_date,
+        current_date() as closed_date
+    from complaint_base
 ),
 
--- Join with complaint base and calculate metrics
 final as (
     select
-        cb.complaint_key,
-        cb.customer_key,
-        cb.agent_key,
-        cb.complaint_type,
-        
-        -- Milestone dates
+        de.complaint_key,
+        de.customer_key,
+        de.complaint_date_key,
+        de.agent_key,
+        de.complaint_type,
+        de.full_date,
+        de.day_of_week,
         cl.created_date,
         cl.assigned_date,
         cl.in_progress_date,
         cl.resolved_date,
         cl.closed_date,
-        
-        -- Current status
-        cl.current_status,
-        
-        -- Lag calculations (days between milestones)
         datediff('day', cl.created_date, cl.assigned_date) as days_created_to_assigned,
         datediff('day', cl.assigned_date, cl.in_progress_date) as days_assigned_to_in_progress,
         datediff('day', cl.in_progress_date, cl.resolved_date) as days_in_progress_to_resolved,
         datediff('day', cl.resolved_date, cl.closed_date) as days_resolved_to_closed,
-        
-        -- Total lifecycle time
         datediff('day', cl.created_date, cl.resolved_date) as days_created_to_resolved,
         datediff('day', cl.created_date, cl.closed_date) as days_created_to_closed,
-        
-        -- Time in current stage (for open complaints)
-        case 
-            when cl.current_status = 'open' 
-            then datediff('day', cl.created_date, current_date())
-            when cl.current_status = 'assigned' 
-            then datediff('day', cl.assigned_date, current_date())
-            when cl.current_status = 'in_progress' 
-            then datediff('day', cl.in_progress_date, current_date())
+        case
+            when cl.current_status = 'open' then datediff('day', cl.created_date, current_date())
+            when cl.current_status = 'assigned' then datediff('day', cl.assigned_date, current_date())
+            when cl.current_status = 'in_progress' then datediff('day', cl.in_progress_date, current_date())
             else null
         end as days_in_current_stage,
-        
-        -- sla 3 days
         case 
             when cl.current_status in ('resolved', 'closed')
                 and datediff('day', cl.created_date, cl.resolved_date) <= 3
@@ -154,18 +74,15 @@ final as (
             then 0
             else null
         end as met_resolution_sla,
-        
-        -- Status flags
         case when cl.current_status = 'open' then 1 else 0 end as is_open,
         case when cl.current_status = 'assigned' then 1 else 0 end as is_assigned,
         case when cl.current_status = 'in_progress' then 1 else 0 end as is_in_progress,
         case when cl.current_status = 'resolved' then 1 else 0 end as is_resolved,
         case when cl.current_status = 'closed' then 1 else 0 end as is_closed,
-        
         current_timestamp() as snapshot_timestamp
-        
-    from complaint_base cb
-    left join current_lifecycle cl on cb.complaint_key = cl.complaint_key
+    from date_enriched de
+    left join current_lifecycle cl 
+        on de.complaint_key = cl.complaint_key
 )
 
 select * from final

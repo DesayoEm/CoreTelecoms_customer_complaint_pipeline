@@ -40,7 +40,7 @@ complaint_metrics as (
             else 0
         end as avg_complaints_per_month
         
-    from {{ ref('fact_complaint_transaction') }}
+    from {{ ref('fact_unified_complaint') }}
     group by customer_key
 ),
 

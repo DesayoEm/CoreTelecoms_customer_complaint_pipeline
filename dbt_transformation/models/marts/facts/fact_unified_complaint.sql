@@ -2,7 +2,7 @@
     config(
         materialized="incremental",
         unique_key="complaint_key",
-        on_schema_change="append_new_columns",
+        on_schema_change="append_new_columns"
     )
 }}
 
@@ -74,6 +74,8 @@ with
         on cl.agent_id = agt.agent_id
             and cl.complaint_date >= agt.experience_effective_date
             and (cl.complaint_date <= agt.experience_expiry_date or agt.is_active = 1)
+    left join {{ ref("dim_date") }} d
+        on cl.complaint_date = d.date_day
 ),
 
     sm_complaints_transformed as (
@@ -118,6 +120,8 @@ with
             on sc.agent_id = agt.agent_id
             and sc.complaint_date >= agt.experience_effective_date
             and (sc.complaint_date <= agt.experience_expiry_date or agt.is_active = 1)
+        left join {{ ref("dim_date") }} d
+            on sc.complaint_date = d.date_day
     ),
 
     web_complaints_transformed as (
@@ -162,6 +166,8 @@ with
             on wc.agent_id = agt.agent_id
             and wc.complaint_date >= agt.experience_effective_date
             and (wc.complaint_date <= agt.experience_expiry_date or agt.is_active = 1)
+        left join {{ ref("dim_date") }} d
+            on wc.complaint_date = d.date_day
     ),
 
     final as (
@@ -170,6 +176,19 @@ with
         select * from sm_complaint_fct
         union all
         select * from web_complaint_fct
-    )
+    ),
 
-select * from final
+    date_enriched_final as (
+    select
+        f.*,
+        d.date_day as cmpt_full_date,
+        d.day_of_week as cmpt_day_of_week,
+        d.day_of_week_name as cmpt_day_of_week_name,
+        d.month_name as cmpt_day_month_name,
+        d.quarter_of_year as cmpt_quarter_of_year
+    from final f
+    left join coretelecoms_db.analytics.dim_date d
+        on f.complaint_date_key = d.date_key
+)
+
+select * from date_enriched_final
