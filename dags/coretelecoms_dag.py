@@ -93,7 +93,7 @@ def process_complaint_data():
         transformer = Transformer(context=context)
         return transformer.transform_entity(metadata["destination"], "agents")
 
-    @task(task_id="static_data_gate", trigger_rule="all_success")
+    @task(task_id="static_data_gate", trigger_rule="none_failed_min_one_success")
     def static_data_gate():
         """
         Gate that controls when complaints can be processed.
@@ -206,6 +206,7 @@ def process_complaint_data():
     open_gate = static_data_gate()
 
     branch >> [raw_customer_data, raw_agents_data]
+    branch >> open_gate
 
     transform_customers = transform_customers_task(raw_customer_data)
     transform_agents = transform_agents_task(raw_agents_data)
@@ -214,10 +215,7 @@ def process_complaint_data():
     load_agents_wh = load_agents_task()
 
     [transform_customers, transform_agents] >> mark_complete
-    mark_complete >> [load_customers_wh, load_agents_wh]
-
-    # GATE OPEN AFTER BRANCH IS RESOLVED
-    branch >> open_gate
+    mark_complete >> [load_customers_wh, load_agents_wh] >> open_gate
 
     # COMPLAINT INGESTION CAN RUN INDEPENDENTLY
     raw_call_logs = ingest_call_logs_task()
