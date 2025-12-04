@@ -8,6 +8,7 @@ from include.etl.extraction.google_extractor import GoogleSheetsExtractor
 from airflow.providers.dbt.cloud.operators.dbt import DbtCloudRunJobOperator
 from include.etl.extraction.sql_extractor import SQLEXtractor
 from include.etl.transformation.transformation import Transformer
+from include.config import config
 from include.notifications.notifications import (
     success_notification,
     failure_notification,
@@ -33,7 +34,7 @@ default_args = {
     dag_id="coretelecoms_dag",
     start_date=datetime(2025, 11, 20),
     end_date=datetime(2025, 11, 23),
-    max_active_runs=5,
+    max_active_runs=1,
     catchup=True,
     schedule="@daily",
     default_args=default_args,
@@ -187,12 +188,12 @@ def process_complaint_data():
         loader = Loader(context=context)
         return loader.load_tables_to_snowflake(entity_type="web complaints")
 
-    run_dbt = DbtCloudRunJobOperator(
-        task_id="run_dbt_job",
+    trigger_dbt = DbtCloudRunJobOperator(
+        task_id="run_dbt",
+        job_id=config.DBT_JOB_ID,
         dbt_cloud_conn_id="dbt_cloud_default",
-        job_id=12345,
         check_interval=10,
-        wait_for_termination=True,
+        timeout=300,
     )
 
     @task(trigger_rule="all_success")
@@ -247,7 +248,7 @@ def process_complaint_data():
     transform_web >> load_web
 
     cleanup = cleanup_checkpoints_task()
-    [load_call_logs, load_sm, load_web] >> cleanup
+    [load_call_logs, load_sm, load_web] >> trigger_dbt >> cleanup
 
 
 process_complaint_data()

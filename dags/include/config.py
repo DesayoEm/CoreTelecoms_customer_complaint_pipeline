@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     SM_COMPLAINTS_OBJ_PREFIX: str
     WEB_COMPLAINTS_OBJ_PREFIX: str
 
+    DBT_JOB_ID: str
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )

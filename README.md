@@ -14,9 +14,9 @@ This solution delivers a unified data platform that:
 
 - [Architecture](#architecture)
 - [Architectural Decisions](#architectural-decisions)
-- [Prerequisites](#prerequisites)
+- [Data Warehouse](#data-warehouse-design)
 - [Installation](#installation)
-- [Running the Pipeline](#running-the-pipeline)
+
 
 ---
 
@@ -68,7 +68,7 @@ This isolates authentication and connection logic  isolated while sharing common
 
 The transformation layer also implements a three-class architecture that separates value cleaning, DataFrame-level validation, and pipeline orchestration into distinct classes with single responsibilities.
 
-**DataCleaner:** Handles individual field cleaning (email validation, phone formatting, timestamp parsing). Contains no orchestration logic—pure transformation functions.
+**DataCleaner:** Handles individual field cleaning (email validation, phone formatting, timestamp parsing). Contains no orchestration logic, pure transformation functions.
 
 **DataQualityChecker:** Examines raw data and identifies records with validation failures.
 It then creates a separate DataFrame of problematic records with original invalid values intact.
@@ -93,9 +93,10 @@ While ThreadPool is limited by Python's Global Interpreter Lock (GIL) for pure P
 
 **Trade-off**: ThreadPool is limited by Python's GIL for pure Python operations, but still provides performance gains for I/O-bound operations and regex pattern matching (which releases the GIL).
 
----
 ## Testing
 - **140+ Unit Tests**: Comprehensive test coverage for all transformation logic
+---
+
 
 
 ### Loading: Batched Transform-Load with Checkpointing
@@ -131,16 +132,123 @@ The five independent data sources have no mechanism to enforce referential integ
 
 ---
 
+## Data Warehouse Design
+
+The warehouse implements a **star schema** optimized for cross-channel complaint analysis and predictive modeling, consisting of two dimension tables,  complementary fact tables and a ML feature store for customers.
+
+![snapshot.png](docs/snapshot.png)
+#### Core Dimensions
+
+**`dim_customers`** and **`dim_agents`** form the foundation of the model. Both implement **Type 2 Slowly Changing Dimensions (SCD)** to track historical changes:
+
+- **Customer addresses** are versioned with `address_effective_date` and `address_expiry_date`, enabling analysis of complaint patterns relative to location changes (e.g., "Do complaints increase after customers move to certain zip codes?")
 
 
-## Prerequisites
+- **Agent experience levels** are versioned with `experience_effective_date` and `experience_expiry_date`, enabling effectiveness tracking as agents gain experience (e.g., "How does resolution time improve as agents move from Tier 1 to Tier 2?")
 
-[To be added]
+**Why Type 2 SCD?** Machine learning models benefit from historical context. A churn prediction model can leverage features like "customer moved 3 times in 6 months" or "agent experience level at time of complaint" to improve accuracy.
+
+#### Fact Tables
+
+**`fact_unified_complaint`** (Transaction Fact)
+Unnifies three complaint channels (call logs, social media, web forms) into a single queryable table using `UNION ALL`.
+
+**Business Value**: Analysts can query all complaint activity without complex joins. A simple SELECT statement can return omnichannel activity.
+
+**Technical Implementation**: Uses incremental loading strategy (`last_updated_at > MAX(last_updated_at)`) to process only new/changed records, reducing compute costs and query latency.
+
+**Design Trade-off**: Stores `resolution_status` and `resolution_date` despite violating transaction fact immutability principles (facts should not update). This is necessary to feed the accumulating snapshot downstream, which depends on current status to build milestone history. 
+I broke a dimensional design rule and accept Type 1 SCD behavior here as a deliberate trade-off.
+
+**`fact_accumulating_snapshot`** (Milestone Tracking)
+Tracks complaint lifecycle progression through status milestones: Backlog → In-Progress → Resolved/Blocked.
+
+**Business Value**: Enables SLA monitoring ("How many complaints resolved within 3 days?"), bottleneck identification ("How long do complaints sit in Backlog?"), and workflow optimization ("Which complaint categories take longest to resolve?").
+
+**Technical Implementation**: 
+- Uses milestone date preservation logic via `COALESCE(existing.backlog_date, current.backlog_date)` to ensure milestone timestamps are captured once and never overwritten
+- Calculates inter-milestone durations (`days_in_progress_to_resolved`) and SLA compliance flags (`met_resolution_sla`)
+- Updates existing records via incremental merge, adding new milestones as complaints progress
+
+### Snowflake Performance Optimization
+
+#### Clustering Strategy
+
+Applied clustering keys on **temporal attributes** (`loaded_at`, `last_updated_at`) across all tables to optimize query performance and reduce micro-partition scanning costs.
+
+**Why temporal clustering?** 
+- My surrogate keys are hash values and therefore exhibit random distribution with no sequential locality. Clustering on these provides no pruning benefits
+- Temporal fields create **sequential data waves**: `loaded_at` reflects DAG execution batches, creating clear time-based partitions that align with common query patterns ("show me complaints from last week")
+- Snowflake's automatic clustering maintenance is most effective when values show temporal progression
+
+**Query Performance Impact**: Time-range queries (`WHERE loaded_at >= '2024-01-01'`) benefit from partition pruning, scanning only relevant micro-partitions instead of full table scans.
+
+---
+
+### Schema Evolution & Maintenance
+
+**Incremental Loading**: All fact tables use `on_schema_change='append_new_columns'` to handle schema evolution gracefully. If source systems add new complaint attributes, they flow through automatically without breaking existing queries.
+
+**Data Freshness**: The `loaded_at` timestamp enables monitoring data recency, critical for ML models that require fresh features for accurate predictions.
+
+**SCD Maintenance**: Type 2 logic automatically expires old versions and creates new versions when dimension attributes change, preserving complete audit history while maintaining current-state query performance.
+
+---
+
+## Key Technical Challenges Solved
+
+### 1. Conditional Orchestration with FK Constraints
+**Problem**: Static data (customers, agents) loads once; complaints load daily. Complaints have FK dependencies requiring strict ordering on first run but not subsequent runs.
+
+**Solution**: Gate pattern with dual-path triggering:
+- First run: `branch → static loads → mark_complete → gate → complaints`  
+- Subsequent runs: `branch → gate → complaints` (static skipped)
+
+Uses `none_failed_min_one_success` trigger rule so gate opens when *either* upstream succeeds. [Implementation](docs/orchestration.md)
+
+### 2. Orphaned Records at Scale
+**Problem**: 5 independent sources can reference non-existent customers/agents, corrupting the dimensional model.
+
+**Solution**: Quarantine pattern compares incoming FKs against conformance layer *before* database load. Invalid records isolated to `data_quality_quarantine`, valid records proceed. 
+PostgreSQL FK constraints never fire—violations caught upstream. [Implementation](docs/quarantine.md)
+
+### 3. Checkpoint-Based Recovery
+**Problem**: Processing millions of rows in single transaction risks memory exhaustion and catastrophic failure.
+
+**Solution**: 100k-row batches with Airflow Variable checkpoint storage. On failure, resume from last successful batch. [Implementation](docs/orchestration.md)
+
+
+## Tech Stack & Engineering Decisions
+
+| Component | Technology | Problem Solved | Decision Rationale |
+|-----------|-----------|----------------|-------------------|
+| **Orchestration** | Apache Airflow 3.0 | Conditional execution with FK dependencies | Implemented gate pattern with `none_failed_min_one_success` trigger rule for dual-path triggering (first run vs subsequent runs) |
+| **Conformance Layer** | RDS PostgreSQL | Orphaned records from 5 independent sources | Quarantine pattern detects FK violations before load, preventing rejections while preserving bad data for investigation |
+| **Recovery** | Checkpoint System | Large dataset failures requiring full reprocessing | Batched transform-load with Variable state management enables resume from last successful batch (~80% cost reduction on retry) |
+| **Data Quality** | Double-Pass Validation | Silent quality issues reaching production | First pass quarantines bad records to S3, second pass cleans valid records—maintains audit trail without information loss |
+| **Warehouse** | Snowflake | Cross-channel complaint analysis + ML features | Star schema with temporal clustering on `loaded_at`, SCD Type 2 for historical context in churn models |
+| **Testing** | pytest + 140+ tests | Regression prevention | Comprehensive coverage across transformation logic|
+
 
 ## Installation
+```bash
+# 1. Deploy infrastructure
+cd infra && terraform init && terraform apply
 
-[To be added]
+# 2. Configure credentials
+cp .env.example .env  # Add your AWS credentials
 
-## Running the Pipeline
+# 3. Start pipeline
+docker-compose up -d
+```
 
-[To be added]
+**Full setup guide**: See [docs/installation.md](docs/installation.md) for detailed instructions including:
+- Infrastructure setup with Terraform
+- Environment variable configuration
+- Database schema initialization
+- Airflow connection setup
+- Google service account configuration
+
+**Prerequisites**: Docker, Terraform, AWS CLI, configured AWS account
+
+---
