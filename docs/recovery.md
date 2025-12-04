@@ -95,23 +95,23 @@ class Loader:
 
 #### **First Attempt (Success)**
 ```
-Batch 1: Load 100k rows → save_checkpoint(batch=1, rows=100k)
-Batch 2: Load 100k rows → save_checkpoint(batch=2, rows=200k)
-Batch 3: Load 100k rows → save_checkpoint(batch=3, rows=300k)
+Batch 1: Load 100k rows ->> save_checkpoint(batch=1, rows=100k)
+Batch 2: Load 100k rows ->> save_checkpoint(batch=2, rows=200k)
+Batch 3: Load 100k rows ->> save_checkpoint(batch=3, rows=300k)
 Task succeeds
 ```
 
 #### **Second Attempt (Failure + Retry)**
 ```
-Batch 1: Load 100k rows → save_checkpoint(batch=1, rows=100k)
-Batch 2: Load 100k rows → save_checkpoint(batch=2, rows=200k)
+Batch 1: Load 100k rows ->> save_checkpoint(batch=1, rows=100k)
+Batch 2: Load 100k rows ->> save_checkpoint(batch=2, rows=200k)
 Batch 3: DATABASE CONNECTION TIMEOUT
 Task fails, Airflow triggers retry
 
 --- RETRY BEGINS ---
-StateLoader.get_state() → LoadState(last_batch_number=2, rows_loaded=200k)
+StateLoader.get_state() ->> LoadState(last_batch_number=2, rows_loaded=200k)
 Resume from Batch 3 (skip already-loaded batches)
-Batch 3: Load 100k rows → save_checkpoint(batch=3, rows=300k)
+Batch 3: Load 100k rows ->> save_checkpoint(batch=3, rows=300k)
 Task succeeds
 ```
 
@@ -126,7 +126,6 @@ Task succeeds
 **Airflow Variable as State Store**:
 - Persistent across task retries
 - Keyed by `dag_id + task_id + execution_date` for uniqueness
-- Negligible cost (~$0.001 per checkpoint)
 
 **Batch Size Optimization**: 100k rows balances:
 - Memory efficiency (avoids OOM)

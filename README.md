@@ -46,6 +46,9 @@ This solution delivers a unified data platform that:
 - Static reference data (customers, agents) loads once on initial run
 - Dynamic complaint data loads daily
 
+[Implementation](docs/orchestration.md)
+![initial.png](docs/initial.png)
+![incremental.png](docs/incremental.png)
 This significantly reduces processing time and resource consumption on subsequent runs by skipping unnecessary reprocessing of unchanging data. 
 
 **Shortest path execution**: Tasks have dependencies only when necessary and run in parallel wherever possible
@@ -81,7 +84,9 @@ I run validation logic twice, once to identify and preserve problematic data, an
 In the first pass, the DataQualityChecker examines the raw data and identifies records with validation failures, and  creates a separate DataFrame of problematic records that still contains the original invalid values. This DataFrame gets uploaded to S3 with complete lineage metadata, creating a permanent record of what data quality issues existed in the source.
 
 In the second pass, the Transformer applies the Cleaner methods to fix or null out invalid values. These cleaned records proceed to the conformance layer for loading. Problematic original data is preserved for investigation, and clean data is loaded without losing information about what Int wrong.
+
 [Implementation](docs/validation.md)
+
 **Trade-off**: Performance cost justified by observability. I maintain a complete audit trail of data quality issues while ensuring clean data reaches the conformance layer.
 
 #### Parallel Processing with ThreadPool
@@ -207,8 +212,8 @@ Applied clustering keys on **temporal attributes** (`loaded_at`, `last_updated_a
 - Subsequent runs: `branch ->> gate ->> complaints` (static skipped)
 
 Uses `none_failed_min_one_success` trigger rule so gate opens when *either* upstream succeeds. [Implementation](docs/orchestration.m)
-![initial.png](docs/initial.png)
-![incremental.png](docs/incremental.png)
+
+
 ### 2. Orphaned Records at Scale
 **Problem**: 5 independent sources can reference non-existent customers/agents, corrupting the dimensional model.
 
@@ -227,7 +232,7 @@ PostgreSQL FK constraints never fire because violations are caught upstream. [Im
 |-----------|-----------|----------------|-------------------|
 | **Orchestration** | Apache Airflow 3.0 | Conditional execution with FK dependencies | Implemented gate pattern with `none_failed_min_one_success` trigger rule for dual-path triggering (first run vs subsequent runs) |
 | **Conformance Layer** | RDS PostgreSQL | Orphaned records from 5 independent sources | Quarantine pattern detects FK violations before load, preventing rejections while preserving bad data for investigation |
-| **Recovery** | Checkpoint System | Large dataset failures requiring full reprocessing | Batched transform-load with Variable state management enables resume from last successful batch (~80% cost reduction on retry) |
+| **Recovery** | Checkpoint System | Large dataset failures requiring full reprocessing | Batched transform-load with Variable state management enables resume from last successful batch (cost reduction on retry) |
 | **Data Quality** | Double-Pass Validation | Silent quality issues reaching production | First pass quarantines bad records to S3, second pass cleans valid records—maintains audit trail without information loss |
 | **Warehouse** | Snowflake | Cross-channel complaint analysis + ML features | Star schema with temporal clustering on `loaded_at`, SCD Type 2 for historical context in churn models |
 | **Testing** | pytest + 140+ tests | Regression prevention | Comprehensive coverage across transformation logic|
