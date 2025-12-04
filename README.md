@@ -42,6 +42,20 @@ This solution delivers a unified data platform that:
 
 ### Orchestration: Conditional Execution and Shortest Path Execution
 
+The pipeline's dependency graph presented an orchestration challenge:
+
+**Requirement 1**: Static reference data (customers, agents) should load **once** on the first run to avoid wasting compute  
+**Requirement 2**: Dynamic complaint data should load **daily**  
+**Requirement 3**: Complaints have FK constraints to customers/agents, requiring strict ordering on first run  
+**Requirement 4**: On subsequent runs, complaints must process immediately without waiting for static data (which is skipped)
+
+**The Conflict**: How do you make complaints wait for static data on Run 1, but process immediately on Run 2+ when static tasks are skipped?
+
+Considerations:
+- **Conditional logic in tasks**: Violates separation of concerns, difficult to test reliably.
+- **Separate DAGs**: Coordination complexity, fragile dependencies
+
+### Solution
 **Conditional execution**:The DAG uses Airflow's branching operator with state management via Airflow Variables to implement conditional execution:
 - Static reference data (customers, agents) loads once on initial run
 - Dynamic complaint data loads daily
@@ -214,7 +228,7 @@ Applied clustering keys on **temporal attributes** (`loaded_at`, `last_updated_a
 Uses `none_failed_min_one_success` trigger rule so gate opens when *either* upstream succeeds. [Implementation](docs/orchestration.m)
 
 
-### 2. Orphaned Records at Scale
+### 2. Orphaned Records
 **Problem**: 5 independent sources can reference non-existent customers/agents, corrupting the dimensional model.
 
 **Solution**: Quarantine pattern compares incoming FKs against conformance layer *before* database load. Invalid records isolated to `data_quality_quarantine`, valid records proceed. 
@@ -233,7 +247,7 @@ PostgreSQL FK constraints never fire because violations are caught upstream. [Im
 | **Orchestration** | Apache Airflow 3.0 | Conditional execution with FK dependencies | Implemented gate pattern with `none_failed_min_one_success` trigger rule for dual-path triggering (first run vs subsequent runs) |
 | **Conformance Layer** | RDS PostgreSQL | Orphaned records from 5 independent sources | Quarantine pattern detects FK violations before load, preventing rejections while preserving bad data for investigation |
 | **Recovery** | Checkpoint System | Large dataset failures requiring full reprocessing | Batched transform-load with Variable state management enables resume from last successful batch (cost reduction on retry) |
-| **Data Quality** | Double-Pass Validation | Silent quality issues reaching production | First pass quarantines bad records to S3, second pass cleans valid records—maintains audit trail without information loss |
+| **Data Quality** | Double-Pass Validation | Silent quality issues reaching production | First pass quarantines bad records to S3, second pass cleans valid records, maintains audit trail without information loss |
 | **Warehouse** | Snowflake | Cross-channel complaint analysis + ML features | Star schema with temporal clustering on `loaded_at`, SCD Type 2 for historical context in churn models |
 | **Testing** | pytest + 140+ tests | Regression prevention | Comprehensive coverage across transformation logic|
 

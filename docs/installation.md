@@ -8,7 +8,7 @@
 - [Airflow Connections Setup](#airflow-connections-setup)
 - [Database Schema Initialization](#database-schema-initialization)
 - [Verification](#verification)
-- [Troubleshooting](#troubleshooting)
+
 
 ---
 
@@ -119,7 +119,7 @@ aws configure
 terraform init
 ```
 
-This downloads required providers (AWS, etc.) and prepares Terraform state.
+This downloads required provider (AWS) and prepares Terraform state.
 
 #### Review Planned Changes
 
@@ -247,7 +247,7 @@ SILVER_DB_CONN_STRING=postgresql://postgres:YourPassword@your-rds-endpoint.regio
 
 ```bash
 # Bronze layer S3 bucket (from Terraform output)
-BRONZE_BUCKET=coretelecoms-bronze-12345678
+BRONZE_BUCKET=coretelecoms-bronze
 ```
 
 #### Staging Destinations
@@ -301,10 +301,10 @@ DBT_JOB_ID=123456
 **To get dbt Cloud credentials**:
 1. Sign up for free account at [dbt Cloud](https://cloud.getdbt.com/)
 2. Create new project connected to your GitHub repository
-3. Go to **Account Settings → API Access**
+3. Go to **Account Settings ->> API Access**
 4. Create **Service Token** with "Job Admin" permissions
 5. Copy token to DBT_CLOUD_API_TOKEN
-6. Go to **Deploy → Jobs** → Select your job → Note Job ID from URL
+6. Go to **Deploy ->> Jobs** ->> Select your job ->> Note Job ID from URL
 7. Copy Job ID to DBT_JOB_ID
 
 ### Snowflake Configuration
@@ -387,9 +387,6 @@ SNOWFLAKE_DATABASE=CORETELECOMS_DB
 SNOWFLAKE_SCHEMA=STG
 SNOWFLAKE_ROLE=TRANSFORMER
 ```
-
-**Security**: Never commit `.env` to version control. It's included in `.gitignore`.
-
 ---
 
 ## Airflow Connections Setup
@@ -400,7 +397,7 @@ Configure Airflow connections through the Web UI.
 
 1. Navigate to http://localhost:8080
 2. Login with `admin` / `admin`
-3. Go to **Admin → Connections**
+3. Go to **Admin ->> Connections**
 
 ### 1. AWS Destination Connection
 
@@ -417,7 +414,7 @@ Connection for Airflow to write to Bronze S3 bucket.
   {"region_name": "us-east-1"}
   ```
 
-**Test Connection** → Should succeed.
+**Test Connection** ->> Should succeed.
 
 ### 2. AWS Source Connection
 
@@ -450,7 +447,7 @@ Connection to Silver conformance layer.
 - **Password**: (your RDS password)
 - **Port**: `5432`
 
-**Test Connection** → Should succeed if RDS is accessible.
+**Test Connection** ->> Should succeed if RDS is accessible.
 
 **Troubleshooting**: If connection fails:
 - Check RDS security group allows inbound on port 5432 from Airflow
@@ -464,17 +461,13 @@ For pipeline notifications.
 **Add new connection:**
 
 - **Connection ID**: `slack`
-- **Connection Type**: `Slack Incoming Webhook`
-- **Webhook URL**: `https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX`
+- **Connection Type**: `Slack API`
 
 **To get webhook URL**:
-1. Go to [Slack API Apps](https://api.slack.com/apps)
+1. Go to [Slack API Apps]
 2. Create new app or select existing
-3. Add "Incoming Webhooks" feature
-4. Create webhook for target channel (e.g., `#dag_alerts`)
-5. Copy webhook URL
+3. Create a token for target channel (e.g., `#dag_alerts`)
 
-**Test**: Run any Airflow task and check Slack channel for notification.
 
 ### 5. Snowflake Connection (Gold Layer)
 
@@ -484,22 +477,14 @@ Connection to Snowflake data warehouse.
 
 - **Connection ID**: `snowflake`
 - **Connection Type**: `Snowflake`
-- **Account**: (Snowflake account identifier, e.g., `abc12345.us-east-1`)
-- **Warehouse**: (your warehouse name, e.g., `COMPUTE_WH`)
+- **Account**: (Snowflake account identifier, e.g., `abc12345-tyuihg`)
+- **Warehouse**: (your warehouse name, e.g., `CORETELECOMS_WH`)
 - **Database**: (your database, e.g., `CORETELECOMS_DB`)
 - **Schema**: `STG` (staging schema for initial loads)
 - **Login**: (your Snowflake username)
 - **Password**: (your Snowflake password)
-- **Role**: (your role, e.g., `ACCOUNTADMIN` or `SYSADMIN`)
+- **Role**: (your role, e.g., `ACCOUNTADMIN` or `SYSADMIN
 
-**Extra** (optional):
-```json
-{
-  "region": "us-east-1"
-}
-```
-
-**Test Connection** → Should succeed.
 
 ### 6. dbt Cloud Connection
 
@@ -510,25 +495,24 @@ For automated dbt job execution.
 **Add new connection:**
 
 - **Connection ID**: `dbt_cloud_default`
-- **Connection Type**: `dbt Cloud`
 - **Account ID**: (your dbt Cloud account ID from URL)
 - **API Token**: (from `.env` DBT_CLOUD_API_TOKEN)
 
 **To get dbt Cloud credentials**:
 1. Login to [dbt Cloud](https://cloud.getdbt.com/)
-2. Go to **Account Settings → API Access**
+2. Go to **Account Settings ->> API Access**
 3. Create **Service Token** with "Job Admin" permissions
 4. Copy token
 5. Note Account ID from URL: `https://cloud.getdbt.com/deploy/{ACCOUNT_ID}/projects/...`
 
 **Configure Job ID**:
-- In dbt Cloud: **Deploy → Jobs** → Select your production job
+- In dbt Cloud: **Deploy ->> Jobs** ->> Select your production job
 - Note Job ID from URL or job details page
 - Add to `.env` as `DBT_JOB_ID`
 
 **Test**: Trigger DAG and verify:
 1. DAG completes successfully
-2. In dbt Cloud: **Deploy → Run History** shows new run
+2. In dbt Cloud: **Deploy ->> Run History** shows new run
 3. In Snowflake: Check `ANALYTICS` schema for dimensional tables:
    ```sql
    USE SCHEMA CORETELECOMS_DB.ANALYTICS;
@@ -557,7 +541,7 @@ Configure Snowflake data warehouse for dimensional models.
 
 After logging in:
 1. Look at URL: `https://app.snowflake.com/{account_locator}/{...}`
-2. Or go to **Admin → Accounts** → Copy **Account Locator**
+2. Or go to **Admin ->> Accounts** ->> Copy **Account Locator**
 3. Format is: `abc12345.us-east-1`
 4. **Important**: Do NOT use full URL, just the account identifier
 
@@ -687,9 +671,6 @@ CREATE WAREHOUSE COMPUTE_WH WITH
 -- Set as default warehouse
 USE WAREHOUSE COMPUTE_WH;
 ```
-
-**Cost Optimization**: X-SMALL warehouse costs ~$2/hour when running. Auto-suspend ensures you only pay when actively querying.
-
 ### Step 6: Create Service Account for Airflow
 
 Create dedicated user for pipeline:
@@ -746,7 +727,7 @@ Configure dbt to read from Snowflake and write dimensional models.
      - **Role**: `TRANSFORMER`
      - **Username**: `DBT_USER` (create separate user for dbt)
      - **Password**: (dbt user password)
-   - Click **Test Connection** → Should succeed
+   - Click **Test Connection** ->> Should succeed
 
 3. **Create dbt Service User** (in Snowflake):
    ```sql
@@ -779,10 +760,10 @@ Configure dbt to read from Snowflake and write dimensional models.
    - Ensure repository structure:
    
 6. **Create Production Job**:
-   - Go to **Deploy → Environments**
-   - Click **Create Environment** → Select **Production**
+   - Go to **Deploy ->> Environments**
+   - Click **Create Environment** ->> Select **Production**
    - Set schema to `ANALYTICS`
-   - Go to **Deploy → Jobs**
+   - Go to **Deploy ->> Jobs**
    - Click **Create Job**
    - Configure:
      - **Job Name**: `CoreTelecoms Production`
@@ -885,11 +866,6 @@ The initialization script creates:
 
 **Data Quality**:
 - `data_quality_quarantine` (JSONB storage for orphaned records)
-
-**Indexes**:
-- Primary keys on all conformed tables
-- Foreign key indexes for join performance
-- GIN index on `data_quality_quarantine.record_data` for JSON queries
 
 ### Verify Schema Creation
 
