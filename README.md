@@ -9,7 +9,7 @@ This solution delivers a unified data platform that:
 - Ensures data integrity through referential integrity checks within a conformance layer
 - Delivers a dimensional model optimized for analytics and ML feature sets
 
-
+![OVERVIEW.png](docs/OVERVIEW.png)
 ## Table of Contents
 
 - [Architecture](#architecture)
