@@ -99,6 +99,7 @@ final as (
     {% if is_incremental() %}
     left join {{ this }} existing 
         on cl.complaint_key = existing.complaint_key
+    where cl.last_updated_at > (select max(last_updated_at) from {{ this }})
     {% endif %}
 )
 
