@@ -27,23 +27,28 @@ resource "aws_iam_policy" "s3_access" {
   description = "Allow read/write to specified buckets"
 
   policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject",
-          "s3:GetObject",
-          "s3:DeleteObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          aws_s3_bucket.coretelecoms-lake.arn,
-          "${aws_s3_bucket.coretelecoms-lake.arn}/*"
-        ]
-      }
-    ]
-  })
+  Version = "2012-10-17"
+  Statement = [
+    {
+      Effect = "Allow"
+      Action = [
+        "s3:ListBucket"
+      ]
+      Resource = aws_s3_bucket.coretelecoms-lake.arn
+    },
+    {
+      Effect = "Allow"
+      Action = [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:HeadObject"
+      ]
+      Resource = "${aws_s3_bucket.coretelecoms-lake.arn}/*"
+    }
+  ]
+})
+
 }
 
 resource "aws_iam_user_policy_attachment" "airflow_s3" {

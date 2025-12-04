@@ -81,7 +81,7 @@ I run validation logic twice, once to identify and preserve problematic data, an
 In the first pass, the DataQualityChecker examines the raw data and identifies records with validation failures, and  creates a separate DataFrame of problematic records that still contains the original invalid values. This DataFrame gets uploaded to S3 with complete lineage metadata, creating a permanent record of what data quality issues existed in the source.
 
 In the second pass, the Transformer applies the Cleaner methods to fix or null out invalid values. These cleaned records proceed to the conformance layer for loading. Problematic original data is preserved for investigation, and clean data is loaded without losing information about what Int wrong.
-
+[Implementation](docs/validation.md)
 **Trade-off**: Performance cost justified by observability. I maintain a complete audit trail of data quality issues while ensuring clean data reaches the conformance layer.
 
 #### Parallel Processing with ThreadPool
@@ -109,6 +109,8 @@ also reduces resource consumption. in the event of a failure, the maximum amount
 - **Loader**: Manages data loading to RDS, maintains state about completed batches and rows loaded
 - **StateLoader**: Stateless utility retrieving checkpoint information from Airflow Variable on retry
 - **LoadState**: Type-safe dataclass representing checkpoint state
+
+[Implementation](docs/recovery.md)
 
 After each batch successfully loads, `save_checkpoint()` pushes state to Airflow Variables. On failure, this checkpoint persists and is retrieved on the next retry.
 
@@ -204,8 +206,9 @@ Applied clustering keys on **temporal attributes** (`loaded_at`, `last_updated_a
 - First run: `branch ->> static loads ->> mark_complete ->> gate ->> complaints`  
 - Subsequent runs: `branch ->> gate ->> complaints` (static skipped)
 
-Uses `none_failed_min_one_success` trigger rule so gate opens when *either* upstream succeeds. [Implementation](docs/orchestration.md)
-
+Uses `none_failed_min_one_success` trigger rule so gate opens when *either* upstream succeeds. [Implementation](docs/orchestration.m)
+![initial.png](docs/initial.png)
+![incremental.png](docs/incremental.png)
 ### 2. Orphaned Records at Scale
 **Problem**: 5 independent sources can reference non-existent customers/agents, corrupting the dimensional model.
 

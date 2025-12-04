@@ -10,8 +10,8 @@ resource "aws_db_instance" "ctp_db_instance" {
   vpc_security_group_ids      = [aws_security_group.database_security_group.id]
   username                    = "ctpadmin"
   manage_master_user_password = true
-  skip_final_snapshot         = true  # TODO: change to false in prod
-  publicly_accessible         = true  # TODO: change to false AFTER AIRFLOW DEPLOYMENT
+  skip_final_snapshot         = false
+  publicly_accessible         = true
 
   tags = {
     Name        = "CoreTelecoms DB"
