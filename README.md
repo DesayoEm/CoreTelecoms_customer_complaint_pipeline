@@ -161,7 +161,7 @@ Unnifies three complaint channels (call logs, social media, web forms) into a si
 I broke a dimensional design rule and accept Type 1 SCD behavior here as a deliberate trade-off.
 
 **`fact_accumulating_snapshot`** (Milestone Tracking)
-Tracks complaint lifecycle progression through status milestones: Backlog → In-Progress → Resolved/Blocked.
+Tracks complaint lifecycle progression through status milestones: Backlog ->> In-Progress ->> Resolved/Blocked.
 
 **Business Value**: Enables SLA monitoring ("How many complaints resolved within 3 days?"), bottleneck identification ("How long do complaints sit in Backlog?"), and workflow optimization ("Which complaint categories take longest to resolve?").
 
@@ -201,8 +201,8 @@ Applied clustering keys on **temporal attributes** (`loaded_at`, `last_updated_a
 **Problem**: Static data (customers, agents) loads once; complaints load daily. Complaints have FK dependencies requiring strict ordering on first run but not subsequent runs.
 
 **Solution**: Gate pattern with dual-path triggering:
-- First run: `branch → static loads → mark_complete → gate → complaints`  
-- Subsequent runs: `branch → gate → complaints` (static skipped)
+- First run: `branch ->> static loads ->> mark_complete ->> gate ->> complaints`  
+- Subsequent runs: `branch ->> gate ->> complaints` (static skipped)
 
 Uses `none_failed_min_one_success` trigger rule so gate opens when *either* upstream succeeds. [Implementation](docs/orchestration.md)
 
@@ -210,7 +210,7 @@ Uses `none_failed_min_one_success` trigger rule so gate opens when *either* upst
 **Problem**: 5 independent sources can reference non-existent customers/agents, corrupting the dimensional model.
 
 **Solution**: Quarantine pattern compares incoming FKs against conformance layer *before* database load. Invalid records isolated to `data_quality_quarantine`, valid records proceed. 
-PostgreSQL FK constraints never fire—violations caught upstream. [Implementation](docs/quarantine.md)
+PostgreSQL FK constraints never fire because violations are caught upstream. [Implementation](docs/quarantine.md)
 
 ### 3. Checkpoint-Based Recovery
 **Problem**: Processing millions of rows in single transaction risks memory exhaustion and catastrophic failure.
