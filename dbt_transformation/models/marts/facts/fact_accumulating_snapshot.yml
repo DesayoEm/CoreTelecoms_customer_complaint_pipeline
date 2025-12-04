@@ -1,0 +1,160 @@
+version: 2
+
+models:
+  - name: fct_complaint_lifecycle_snapshot
+    description: "Accumulating snapshot tracking complaint lifecycle milestones"
+    
+    columns:
+      - name: complaint_key
+        description: "Unique complaint identifier"
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('fact_unified_complaint')
+              field: complaint_key
+      
+      - name: customer_key
+        description: "Customer foreign key"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_key
+      
+      - name: agent_key
+        description: "Agent foreign key"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_agents')
+              field: agent_key
+      
+      - name: complaint_date
+        description: "When complaint was initiated"
+        tests:
+          - not_null
+      
+      - name: resolution_status
+        description: "Current lifecycle status"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['backlog', 'in_progress', 'resolved', 'blocked']
+      
+      - name: backlog_date
+        description: "When complaint entered backlog"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "backlog_date >= complaint_date"
+              config:
+                where: "backlog_date is not null"
+      
+      - name: in_progress_date
+        description: "When work started on complaint"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "in_progress_date >= complaint_date"
+              config:
+                where: "in_progress_date is not null"
+      
+      - name: resolved_date
+        description: "When complaint was resolved"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "resolved_date >= complaint_date"
+              config:
+                where: "resolved_date is not null"
+      
+      - name: blocked_date
+        description: "When complaint was blocked"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "blocked_date >= complaint_date"
+              config:
+                where: "blocked_date is not null"
+      
+      - name: days_initiated_to_resolved
+        description: "Total days from initiation to resolution"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "days_initiated_to_resolved >= 0"
+              config:
+                where: "days_initiated_to_resolved is not null"
+      
+      - name: days_in_progress_to_resolved
+        description: "Days from in_progress to resolved"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "days_in_progress_to_resolved >= 0"
+              config:
+                where: "days_in_progress_to_resolved is not null"
+      
+      - name: met_resolution_sla
+        description: "Whether 3-day SLA was met"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              config:
+                where: "met_resolution_sla is not null"
+      
+      - name: is_in_progress
+        description: "Flag for in_progress status"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: is_resolved
+        description: "Flag for resolved status"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: is_backlog
+        description: "Flag for backlog status"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: is_blocked
+        description: "Flag for blocked status"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+    
+    tests:
+      # Milestone date ordering - backlog should be before in_progress
+      - dbt_utils.expression_is_true:
+          expression: "backlog_date <= coalesce(in_progress_date, current_date())"
+          name: backlog_before_in_progress
+          config:
+            where: "backlog_date is not null"
+      
+      # in_progress should be before resolved
+      - dbt_utils.expression_is_true:
+          expression: "in_progress_date <= coalesce(resolved_date, current_date())"
+          name: in_progress_before_resolved
+          config:
+            where: "in_progress_date is not null"
+      
+      # esolved complaints should have resolved_date 
+      - dbt_utils.expression_is_true:
+          expression: "case when resolution_status = 'resolved' then resolved_date is not null else true end"
+          name: resolved_status_has_date
+      
+      # Status flags MUST match resolution_status
+      - dbt_utils.expression_is_true:
+          expression: "case when resolution_status = 'in_progress' then is_in_progress = 1 else is_in_progress = 0 end"
+          name: in_progress_flag_matches_status
+      
+      - dbt_utils.expression_is_true:
+          expression: "case when resolution_status = 'resolved' then is_resolved = 1 else is_resolved = 0 end"
+          name: resolved_flag_matches_status
+      
+      - dbt_utils.expression_is_true:
+          expression: "case when resolution_status = 'backlog' then is_backlog = 1 else is_backlog = 0 end"
+          name: backlog_flag_matches_status
+      
+      - dbt_utils.expression_is_true:
+          expression: "case when resolution_status = 'blocked' then is_blocked = 1 else is_blocked = 0 end"
+          name: blocked_flag_matches_status
