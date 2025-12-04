@@ -5,6 +5,7 @@ from pendulum import datetime, duration
 from airflow.sdk.definitions.context import get_current_context
 from include.etl.extraction.s3_extractor import S3Extractor
 from include.etl.extraction.google_extractor import GoogleSheetsExtractor
+from airflow.providers.dbt.cloud.operators.dbt import DbtCloudRunJobOperator
 from include.etl.extraction.sql_extractor import SQLEXtractor
 from include.etl.transformation.transformation import Transformer
 from include.notifications.notifications import (
@@ -32,7 +33,7 @@ default_args = {
     dag_id="coretelecoms_dag",
     start_date=datetime(2025, 11, 20),
     end_date=datetime(2025, 11, 23),
-    max_active_runs=1,
+    max_active_runs=5,
     catchup=True,
     schedule="@daily",
     default_args=default_args,
@@ -185,6 +186,14 @@ def process_complaint_data():
         context = get_current_context()
         loader = Loader(context=context)
         return loader.load_tables_to_snowflake(entity_type="web complaints")
+
+    run_dbt = DbtCloudRunJobOperator(
+        task_id="run_dbt_job",
+        dbt_cloud_conn_id="dbt_cloud_default",
+        job_id=12345,
+        check_interval=10,
+        wait_for_termination=True,
+    )
 
     @task(trigger_rule="all_success")
     def cleanup_checkpoints_task():
