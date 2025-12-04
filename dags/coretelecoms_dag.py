@@ -5,8 +5,10 @@ from pendulum import datetime, duration
 from airflow.sdk.definitions.context import get_current_context
 from include.etl.extraction.s3_extractor import S3Extractor
 from include.etl.extraction.google_extractor import GoogleSheetsExtractor
+from airflow.providers.dbt.cloud.operators.dbt import DbtCloudRunJobOperator
 from include.etl.extraction.sql_extractor import SQLEXtractor
 from include.etl.transformation.transformation import Transformer
+from include.config import config
 from include.notifications.notifications import (
     success_notification,
     failure_notification,
@@ -186,6 +188,14 @@ def process_complaint_data():
         loader = Loader(context=context)
         return loader.load_tables_to_snowflake(entity_type="web complaints")
 
+    trigger_dbt = DbtCloudRunJobOperator(
+        task_id="run_dbt",
+        job_id=config.DBT_JOB_ID,
+        dbt_cloud_conn_id="dbt_cloud_default",
+        check_interval=10,
+        timeout=300,
+    )
+
     @task(trigger_rule="all_success")
     def cleanup_checkpoints_task():
         """Clear all checkpoints after successful DAG run."""
@@ -238,7 +248,7 @@ def process_complaint_data():
     transform_web >> load_web
 
     cleanup = cleanup_checkpoints_task()
-    [load_call_logs, load_sm, load_web] >> cleanup
+    [load_call_logs, load_sm, load_web] >> trigger_dbt >> cleanup
 
 
 process_complaint_data()
