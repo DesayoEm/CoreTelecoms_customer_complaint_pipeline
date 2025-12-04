@@ -240,29 +240,69 @@ PostgreSQL FK constraints never fire because violations are caught upstream. [Im
 **Solution**: 100k-row batches with Airflow Variable checkpoint storage. On failure, resume from last successful batch. [Implementation](docs/orchestration.md)
 
 
+
 ## Tech Stack & Engineering Decisions
 
 | Component | Technology | Problem Solved | Decision Rationale |
 |-----------|-----------|----------------|-------------------|
-| **Orchestration** | Apache Airflow 3.0 | Conditional execution with FK dependencies | Implemented gate pattern with `none_failed_min_one_success` trigger rule for dual-path triggering (first run vs subsequent runs) |
-| **Conformance Layer** | RDS PostgreSQL | Orphaned records from 5 independent sources | Quarantine pattern detects FK violations before load, preventing rejections while preserving bad data for investigation |
-| **Recovery** | Checkpoint System | Large dataset failures requiring full reprocessing | Batched transform-load with Variable state management enables resume from last successful batch (cost reduction on retry) |
-| **Data Quality** | Double-Pass Validation | Silent quality issues reaching production | First pass quarantines bad records to S3, second pass cleans valid records, maintains audit trail without information loss |
-| **Warehouse** | Snowflake | Cross-channel complaint analysis + ML features | Star schema with temporal clustering on `loaded_at`, SCD Type 2 for historical context in churn models |
-| **Testing** | pytest + 140+ tests | Regression prevention | Comprehensive coverage across transformation logic|
+| **Orchestration** | Apache Airflow 3.0 | Conditional execution with FK dependencies | Gate pattern with `none_failed_min_one_success` trigger rule for dual-path triggering |
+| **Conformance Layer** | RDS PostgreSQL | Orphaned records from 5 independent sources | Quarantine pattern detects FK violations before load, preventing corrupted dimensional model |
+| **Recovery** | Checkpoint System | Large dataset failures requiring full reprocessing | Batched transform-load with Variable state management enables resume from last successful batch |
+| **Data Quality** | Double-Pass Validation | Silent quality issues reaching production | First pass quarantines bad records to S3, second pass cleans valid records, maintains audit trail |
+| **Warehouse** | Snowflake | Cross-channel complaint analysis + ML features | Star schema with temporal clustering on `loaded_at`, SCD Type 2 for historical context |
+| **Observability** | Slack + XCom Metadata | Opaque failures requiring log diving | Metadata propagation through XCom with contextual alerts including metrics, lineage, and checkpoint state |
+| **CI/CD** | GitHub Actions | Manual deployments, inconsistent code quality | Automated linting (black/flake8) on PRs, Docker build/push gated on CI success |
+| **Testing** | pytest + 140+ tests | Regression prevention in transformation logic | Comprehensive unit test coverage across all cleaning and validation functions |
+| **IaC** | Terraform | Manual infrastructure provisioning | Declarative AWS resource management (S3, RDS, IAM) with remote state backend |
 
+
+## Observability & Monitoring
+
+### Multi-Layer Metadata Tracking
+
+The pipeline implements comprehensive observability with metadata propagation through Airflow XCom and actionable Slack alerts at every processing stage.
+
+**Key Capabilities**:
+- **Lineage Tracking**: Every file processed includes source, destination, execution timestamp, and Airflow run context
+- **Metrics Visibility**: Row counts, data quality rates, file sizes tracked at extraction, transformation, and load stages
+- **Failure Context Preservation**: Diagnostic metadata captured even when tasks fail mid-execution
+- **Graceful Degradation**: Missing Slack connections log warnings without crashing pipeline
+
+
+### Slack Notifications include:
+
+
+- Rows processed and loaded
+- Data quality metrics (percentage of clean records)
+- Source and destination paths
+- Execution lineage (DAG ID, task ID, run ID)
+
+[Implementation](docs/observability.md)
+
+
+## CI/CD Pipeline
+
+The project implements automated CI/CD workflows via GitHub Actions to ensure code quality and streamline deployments.
+
+### Continuous Integration (`.github/workflows/ci.yml`)
+
+Runs on every push and pull request to enforce code standards:
+
+- **Formatting Validation**: `black --check` ensures consistent Python code style
+- **Trigger**: Automated on push to `main` and all PRs
+
+
+
+### Continuous Deployment (`.github/workflows/cd.yml`)
+Automates Docker image builds and registry publishing:
+
+- **Conditional Execution**: Only runs after successful CI pipeline completion
+- **Docker Build**: Builds production image from latest `main` branch code
+- **Secrets Management**: Credentials stored securely in GitHub Secrets
+- 
+**Workflow Dependencies**: CD pipeline gates on CI success, preventing deployment of code that fails quality checks.
 
 ## Installation
-```bash
-# 1. Deploy infrastructure
-cd infra && terraform init && terraform apply
-
-# 2. Configure credentials
-cp .env.example .env  # Add your AWS credentials
-
-# 3. Start pipeline
-docker-compose up -d
-```
 
 **Full setup guide**: See [docs/installation.md](docs/installation.md) for detailed instructions including:
 - Infrastructure setup with Terraform
