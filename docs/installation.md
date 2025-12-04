@@ -388,7 +388,7 @@ SNOWFLAKE_SCHEMA=STG
 SNOWFLAKE_ROLE=TRANSFORMER
 ```
 
-**⚠Security**: Never commit `.env` to version control. It's included in `.gitignore`.
+**Security**: Never commit `.env` to version control. It's included in `.gitignore`.
 
 ---
 
@@ -777,18 +777,7 @@ Configure dbt to read from Snowflake and write dimensional models.
 5. **Set Up Repository**:
    - Connect dbt to GitHub repo containing models (in `/models` directory)
    - Ensure repository structure:
-     ```
-     models/
-     ├── sources.yml          # Source tables from STG schema
-     ├── analytics/
-     │   ├── dim_customers.sql
-     │   ├── dim_agents.sql
-     │   ├── dim_date.sql
-     │   ├── fact_unified_complaint.sql
-     │   └── fact_accumulating_snapshot.sql
-     └── schema.yml
-     ```
-
+   
 6. **Create Production Job**:
    - Go to **Deploy → Environments**
    - Click **Create Environment** → Select **Production**
@@ -840,32 +829,12 @@ SHOW GRANTS TO ROLE TRANSFORMER;
 ```
 
 **Expected Results**:
-- ✅ 3 schemas: `STG`, `ANALYTICS`, `DBT_DEV`
-- ✅ 5 staging tables in `STG` schema
-- ✅ Warehouse `COMPUTE_WH` exists and is suspended
-- ✅ Role `TRANSFORMER` has appropriate grants
-- ✅ After dbt runs: dimensional tables in `ANALYTICS` schema
+- 3 schemas: `STG`, `ANALYTICS`, `DBT_DEV`
+- 5 staging tables in `STG` schema
+- Warehouse `COMPUTE_WH` exists and is suspended
+- Role `TRANSFORMER` has appropriate grants
+- After dbt runs: dimensional tables in `ANALYTICS` schema
 
-### Snowflake Cost Management
-
-**Free Trial**:
-- $400 credits
-- 30 days
-- No credit card required
-
-**Development Best Practices**:
-- Use X-SMALL warehouse ($2/hour)
-- Enable auto-suspend (60 seconds)
-- Monitor credit usage: **Admin → Usage**
-- Suspend warehouse manually when not in use:
-  ```sql
-  ALTER WAREHOUSE COMPUTE_WH SUSPEND;
-  ```
-
-**Estimated Monthly Costs (Post-Trial)**:
-- X-SMALL warehouse: ~$20/month (1 hour/day usage)
-- Storage (1GB): ~$23/month
-- **Total**: ~$43/month for development
 
 ---
 
@@ -1028,125 +997,7 @@ SELECT COUNT(*) FROM fact_unified_complaint;
 SELECT COUNT(*) FROM fact_accumulating_snapshot;
 ```
 
-**Solution**:
-1. Check DAG file has no Python syntax errors
-2. View scheduler logs: `docker compose logs airflow-scheduler`
-3. Verify DAG file is in `/dags` directory
-4. Check Airflow `LOAD_EXAMPLES` is `false` in `docker-compose.yml`
 
-**Issue**: Tasks fail with import errors
-
-**Solution**:
-```bash
-# Install Python dependencies
-docker compose exec airflow-webserver pip install -r requirements.txt
-
-# Or rebuild image
-docker compose down
-docker compose build
-docker compose up -d
-```
-
-### AWS Connection Issues
-
-**Issue**: `boto3.exceptions.NoCredentialsError`
-
-**Solution**:
-1. Verify AWS connection in Airflow UI
-2. Test connection → Should be green
-3. Check access keys in `.env` match Airflow connection
-4. Ensure region is correct
-
-**Issue**: S3 access denied
-
-**Solution**:
-1. Check IAM permissions for user/role
-2. Verify bucket name is correct
-3. Check bucket policy allows access from IAM user
-
-### RDS Connection Issues
-
-**Issue**: `psycopg2.OperationalError: could not connect to server`
-
-**Solution**:
-1. Check RDS security group allows inbound on port 5432
-2. Verify RDS is publicly accessible (or Airflow in same VPC)
-3. Test connection from command line:
-   ```bash
-   psql -h rds-endpoint -U postgres -d silver_db
-   ```
-4. Check RDS endpoint is correct (from Terraform output)
-
-**Issue**: Authentication failed
-
-**Solution**:
-1. Verify username/password in Airflow connection
-2. Reset RDS password if needed:
-   ```bash
-   aws rds modify-db-instance \
-     --db-instance-identifier your-instance \
-     --master-user-password NewPassword123
-   ```
-
-### Google Sheets Issues
-
-**Issue**: `gspread.exceptions.APIError: Service account not authorized`
-
-**Solution**:
-1. Verify Google Sheet is shared with service account email
-2. Check service account has Sheets API enabled
-3. Verify JSON key file path is correct in `.env`
-4. Check file permissions: `chmod 600 config/service-account.json`
-
-**Issue**: Sheet not found
-
-**Solution**:
-1. Verify GOOGLE_SHEET_ID in `.env` matches your sheet
-2. Extract ID from URL: `https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit`
-3. Ensure sheet name in code matches actual sheet name
-
-### Snowflake Connection Issues
-
-**Issue**: `snowflake.connector.errors.DatabaseError: Authentication failed`
-
-**Solution**:
-1. Verify account identifier format: `abc12345.us-east-1` (not full URL)
-2. Check username/password in Airflow connection
-3. Verify role has necessary permissions
-4. Test connection from command line:
-   ```bash
-   snowsql -a abc12345.us-east-1 -u username -d database
-   ```
-
-**Issue**: Object does not exist
-
-**Solution**:
-1. Verify database and schema names are correct
-2. Check role has access to database/schema:
-   ```sql
-   USE ROLE ACCOUNTADMIN;
-   GRANT USAGE ON DATABASE CORETELECOMS_DB TO ROLE your_role;
-   GRANT USAGE ON SCHEMA STG TO ROLE your_role;
-   ```
-
-### dbt Cloud Issues
-
-**Issue**: dbt job fails to trigger
-
-**Solution**:
-1. Verify dbt connection in Airflow
-2. Check account ID and API token are correct
-3. Verify job ID exists in dbt Cloud
-4. Check API token has permissions to run jobs
-
-**Issue**: dbt job runs but fails
-
-**Solution**:
-1. View dbt Cloud logs for specific error
-2. Common issues:
-   - Source tables not populated (check RDS conformance layer)
-   - Schema changes (rebuild dbt models)
-   - Snowflake permissions (grant access to STG schema)
 
 ### Docker Commands
 
