@@ -18,7 +18,9 @@ def success_notification(context):
             f"---------------------------------------------\n\n\n"
         )
 
-        notifier = SlackNotifier(slack_conn_id="slack", text=details, channel="dag_alerts")
+        notifier = SlackNotifier(
+            slack_conn_id="slack", text=details, channel="dag_alerts"
+        )
         notifier.notify(context)
     except AirflowNotFoundException:
         log.warning("Slack connection not configured, skipping notification")
@@ -35,7 +37,9 @@ def failure_notification(context):
             f"---------------------------------------------\n\n\n"
         )
 
-        notifier = SlackNotifier(slack_conn_id="slack", text=details, channel="dag_alerts")
+        notifier = SlackNotifier(
+            slack_conn_id="slack", text=details, channel="dag_alerts"
+        )
         notifier.notify(context)
     except AirflowNotFoundException:
         log.warning("Slack connection not configured, skipping notification")
@@ -50,8 +54,9 @@ def notify_batch_already_complete(
             f"{start_batch}/{batches_to_run} batches completed in previous run\n\n"
             f"---------------------------------------------\n\n\n"
         )
-        notifier = SlackNotifier(slack_conn_id="slack", text=details, channel="dag_alerts")
+        notifier = SlackNotifier(
+            slack_conn_id="slack", text=details, channel="dag_alerts"
+        )
         notifier.notify(context)
     except AirflowNotFoundException:
         log.warning("Slack connection not configured, skipping notification")
-

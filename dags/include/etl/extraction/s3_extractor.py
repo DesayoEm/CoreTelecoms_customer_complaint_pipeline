@@ -208,4 +208,3 @@ class S3Extractor:
             obj_prefix=config.SM_COMPLAINTS_OBJ_PREFIX,
             obj_type="social media complaints",
         )
-

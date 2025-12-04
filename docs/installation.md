@@ -1,9 +1,5 @@
 # Installation Guide
 
-Complete setup guide for the CoreTelecoms Customer Complaint Analytics Platform.
-
----
-
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
@@ -70,13 +66,16 @@ Before installing the pipeline, ensure you have the following tools and access c
 
 - [ ] **Slack Workspace** (optional, for notifications)
   - Create Slack App: [Slack API](https://api.slack.com/apps)
-  - Add Incoming Webhook
-  - Note webhook URL
+  - Generate a Slack API token
 
 - [ ] **dbt Cloud Account** (for dimensional modeling)
-  - Free tier available: [dbt Cloud](https://cloud.getdbt.com/)
-  - Create API token
-  - Note Job ID for your dbt project
+  - Create a project connected to your GitHub repo
+  - Create API token with "Job Admin" permissions
+  - Save the Job ID from your dbt job
+
+- [ ] **Snowflake Account** (for data warehouse)
+  - Save your account identifier 
+  - You'll need to create database, schema, and tables (see Snowflake Setup section)
 
 ### Source Data Access
 
@@ -91,17 +90,6 @@ Before installing the pipeline, ensure you have the following tools and access c
   - Share with service account email
   - Note Sheet ID from URL: `https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit`
 
-### Cost Estimation
-
-Estimated monthly AWS costs for development environment:
-- **RDS PostgreSQL (db.t3.micro)**: ~$15/month
-- **S3 Storage (100GB)**: ~$2/month
-- **Data Transfer**: ~$5/month
-- **Total**: ~$22/month
-
-**Note**: Stop RDS instance when not in use to reduce costs.
-
----
 
 ## Installation
 
@@ -114,8 +102,6 @@ cd CoreTelecoms_customer_complaint_pipeline
 
 ### Step 2: Infrastructure Deployment with Terraform
 
-Navigate to infrastructure directory:
-
 ```bash
 cd infra
 ```
@@ -123,10 +109,7 @@ cd infra
 #### Authenticate with AWS
 
 ```bash
-# Option 1: SSO
-aws sso login --profile your-profile
-
-# Option 2: Configure credentials
+# Configure credentials
 aws configure
 ```
 
@@ -159,25 +142,13 @@ terraform apply
 
 Type `yes` when prompted.
 
-**Expected duration**: 5-10 minutes (RDS takes longest to provision).
-
 #### Save Terraform Outputs
 
 ```bash
 terraform output > ../terraform-outputs.txt
 ```
 
-**Important outputs to note**:
-- `bronze_bucket_name`: S3 bucket for data lake
-- `rds_endpoint`: RDS connection endpoint
-- `rds_database_name`: Database name
-- `iam_role_arn`: Service role ARN for Airflow
-
-**Save these values** - you'll need them for environment configuration.
-
 ### Step 3: Configure Environment Variables
-
-Return to project root:
 
 ```bash
 cd ..
@@ -185,26 +156,12 @@ cd ..
 
 Create `.env` file from template:
 
-```bash
-cp .env.example .env
-```
-
 Edit `.env` with your credentials (see [Environment Variables Configuration](#environment-variables-configuration) below).
 
 ### Step 4: Configure Google Service Account
 
-Place your Google Cloud service account JSON in the config directory:
+Place your Google Cloud service account JSON in the infra directory . DO NOT FORGET TO gitignore THIS FILE.
 
-```bash
-mkdir -p config
-cp /path/to/your/service-account-key.json config/service-account.json
-```
-
-Ensure proper permissions:
-
-```bash
-chmod 600 config/service-account.json
-```
 
 ### Step 5: Initialize Airflow Database
 
@@ -214,40 +171,20 @@ chmod 600 config/service-account.json
 docker compose up airflow-init
 ```
 
-Wait for message: `Upgrades done` and container exits.
-
 ### Step 6: Start Airflow Services
 
 ```bash
 docker compose up -d
 ```
-
-This starts:
-- **Airflow Webserver** (port 8080)
-- **Airflow Scheduler**
-- **Postgres** (Airflow metadata)
-- **Redis** (Celery backend)
-- **Airflow Workers** (if using CeleryExecutor)
-
 Verify services are running:
 
 ```bash
 docker compose ps
 ```
 
-All services should show status `Up` or `healthy`.
-
 ### Step 7: Access Airflow UI
 
 Open browser: http://localhost:8080
-
-**Default credentials**:
-- Username: `admin`
-- Password: `admin`
-
-**⚠️ Security Warning**: Change default password in production!
-
----
 
 ## Environment Variables Configuration
 
@@ -259,8 +196,6 @@ Edit `.env` file with your configuration:
 # Google Sheet ID from URL
 GOOGLE_SHEET_ID=1abc123def456ghi789jkl
 
-# Path to service account JSON (inside Docker container)
-GOOGLE_SERVICE_ACCOUNT_PATH=/opt/airflow/config/service-account.json
 ```
 
 ### AWS Credentials (Destination)
@@ -273,8 +208,6 @@ AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 AWS_REGION=us-east-1
 ```
-
-**Best Practice**: Use IAM role with instance profile in production instead of access keys.
 
 ### AWS Source Credentials
 
@@ -357,13 +290,42 @@ SRC_CALL_LOGS_OBJ_KEY=raw/call_logs.csv
 SRC_SM_COMPLAINTS_OBJ_KEY=raw/social_media_complaints.json
 ```
 
-### Optional: dbt Configuration
+### dbt Cloud Configuration
 
 ```bash
-# dbt Cloud API token and job ID
+# dbt Cloud API token and job ID (required for dimensional modeling)
 DBT_CLOUD_API_TOKEN=your_dbt_cloud_api_token
 DBT_JOB_ID=123456
 ```
+
+**To get dbt Cloud credentials**:
+1. Sign up for free account at [dbt Cloud](https://cloud.getdbt.com/)
+2. Create new project connected to your GitHub repository
+3. Go to **Account Settings → API Access**
+4. Create **Service Token** with "Job Admin" permissions
+5. Copy token to DBT_CLOUD_API_TOKEN
+6. Go to **Deploy → Jobs** → Select your job → Note Job ID from URL
+7. Copy Job ID to DBT_JOB_ID
+
+### Snowflake Configuration
+
+```bash
+# Snowflake connection details (required for Gold layer)
+SNOWFLAKE_ACCOUNT=abc123-dmd234
+SNOWFLAKE_USER=your_username
+SNOWFLAKE_PASSWORD=your_password
+
+SNOWFLAKE_WAREHOUSE=CORETELECOMS_WH
+SNOWFLAKE_DATABASE=CORETELECOMS_DB
+SNOWFLAKE_SCHEMA=STG
+SNOWFLAKE_ROLE=ACCOUNTADMIN
+```
+
+**To get Snowflake credentials**:
+1. Sign up for free trial at [Snowflake](https://signup.snowflake.com/)
+2. Note your **Account Identifier** (format: `abc12345.us-east-1`, NOT full URL)
+3. Create database and schema (see Snowflake Setup section below)
+4. Create user with appropriate permissions
 
 ### Complete .env Example
 
@@ -412,12 +374,21 @@ SRC_CUSTOMERS_OBJ_KEY=raw/customers.csv
 SRC_CALL_LOGS_OBJ_KEY=raw/call_logs.csv
 SRC_SM_COMPLAINTS_OBJ_KEY=raw/social_media_complaints.json
 
-# dbt Cloud (optional)
-DBT_CLOUD_API_TOKEN=your_token
+# dbt Cloud (required)
+DBT_CLOUD_API_TOKEN=dbtc_Ab12CdEfGhIjKlMnOpQrStUvWxYz
 DBT_JOB_ID=123456
+
+# Snowflake (required for Gold layer)
+SNOWFLAKE_ACCOUNT=abc12345.us-east-1
+SNOWFLAKE_USER=AIRFLOW_USER
+SNOWFLAKE_PASSWORD=YourStrongPassword123
+SNOWFLAKE_WAREHOUSE=COMPUTE_WH
+SNOWFLAKE_DATABASE=CORETELECOMS_DB
+SNOWFLAKE_SCHEMA=STG
+SNOWFLAKE_ROLE=TRANSFORMER
 ```
 
-**⚠️ Security**: Never commit `.env` to version control. It's included in `.gitignore`.
+**⚠Security**: Never commit `.env` to version control. It's included in `.gitignore`.
 
 ---
 
@@ -530,24 +501,371 @@ Connection to Snowflake data warehouse.
 
 **Test Connection** → Should succeed.
 
-### 6. dbt Cloud Connection (Optional)
+### 6. dbt Cloud Connection
 
 For automated dbt job execution.
+
+**Prerequisites**: Complete [Snowflake Setup](#snowflake-setup-gold-layer) section first.
 
 **Add new connection:**
 
 - **Connection ID**: `dbt_cloud_default`
 - **Connection Type**: `dbt Cloud`
-- **Account ID**: (your dbt Cloud account ID)
+- **Account ID**: (your dbt Cloud account ID from URL)
 - **API Token**: (from `.env` DBT_CLOUD_API_TOKEN)
 
 **To get dbt Cloud credentials**:
 1. Login to [dbt Cloud](https://cloud.getdbt.com/)
 2. Go to **Account Settings → API Access**
-3. Create service token
-4. Note Account ID from URL: `https://cloud.getdbt.com/deploy/{ACCOUNT_ID}/projects/...`
+3. Create **Service Token** with "Job Admin" permissions
+4. Copy token
+5. Note Account ID from URL: `https://cloud.getdbt.com/deploy/{ACCOUNT_ID}/projects/...`
 
-**Test**: Trigger DAG and verify dbt job runs successfully.
+**Configure Job ID**:
+- In dbt Cloud: **Deploy → Jobs** → Select your production job
+- Note Job ID from URL or job details page
+- Add to `.env` as `DBT_JOB_ID`
+
+**Test**: Trigger DAG and verify:
+1. DAG completes successfully
+2. In dbt Cloud: **Deploy → Run History** shows new run
+3. In Snowflake: Check `ANALYTICS` schema for dimensional tables:
+   ```sql
+   USE SCHEMA CORETELECOMS_DB.ANALYTICS;
+   SHOW TABLES;
+   -- Should see: dim_customers, dim_agents, dim_date, 
+   --              fact_unified_complaint, fact_accumulating_snapshot
+   ```
+
+---
+
+## Snowflake Setup (Gold Layer)
+
+Configure Snowflake data warehouse for dimensional models.
+
+### Step 1: Create Snowflake Account
+
+1. Go to [Snowflake Trial Signup](https://signup.snowflake.com/)
+2. Select edition: **Standard** (sufficient for this project)
+3. Choose cloud provider: **AWS** (to match your data lake)
+4. Select region: **US East (N. Virginia)** (or match your AWS region)
+5. Complete registration
+6. Check email for activation link
+7. Set password and login
+
+### Step 2: Note Account Identifier
+
+After logging in:
+1. Look at URL: `https://app.snowflake.com/{account_locator}/{...}`
+2. Or go to **Admin → Accounts** → Copy **Account Locator**
+3. Format is: `abc12345.us-east-1`
+4. **Important**: Do NOT use full URL, just the account identifier
+
+### Step 3: Create Database and Schema
+
+In Snowflake worksheet, run:
+
+```sql
+-- Create database
+CREATE DATABASE CORETELECOMS_DB;
+
+-- Use the database
+USE DATABASE CORETELECOMS_DB;
+
+-- Create staging schema (for data loaded from RDS)
+CREATE SCHEMA STG;
+
+-- Create analytics schema (for dbt dimensional models)
+CREATE SCHEMA ANALYTICS;
+
+-- Verify
+SHOW SCHEMAS;
+```
+
+### Step 4: Create Staging Tables
+
+These tables receive data from the RDS conformance layer.
+
+```sql
+-- Use staging schema
+USE SCHEMA CORETELECOMS_DB.STG;
+
+-- Create customers staging table
+CREATE TABLE CUSTOMERS (
+    CUSTOMER_KEY VARCHAR(64) PRIMARY KEY,
+    CUSTOMER_ID VARCHAR(50) NOT NULL,
+    NAME VARCHAR(255),
+    GENDER CHAR(1),
+    DATE_OF_BIRTH DATE,
+    SIGNUP_DATE DATE,
+    EMAIL VARCHAR(255),
+    ADDRESS VARCHAR(500),
+    ZIP_CODE VARCHAR(10),
+    STATE_CODE VARCHAR(3),
+    STATE VARCHAR(100),
+    LAST_UPDATED_AT TIMESTAMP,
+    CREATED_AT TIMESTAMP,
+    LOADED_AT VARCHAR(10)  -- Execution date from Airflow
+);
+
+-- Create agents staging table
+CREATE TABLE AGENTS (
+    AGENT_KEY VARCHAR(64) PRIMARY KEY,
+    AGENT_ID VARCHAR(50) NOT NULL,
+    NAME VARCHAR(255),
+    EXPERIENCE VARCHAR(50),
+    STATE VARCHAR(100),
+    LAST_UPDATED_AT TIMESTAMP,
+    CREATED_AT TIMESTAMP,
+    LOADED_AT VARCHAR(10)
+);
+
+-- Create call logs staging table
+CREATE TABLE CALL_LOGS (
+    CALL_LOG_KEY VARCHAR(64) PRIMARY KEY,
+    CALL_ID VARCHAR(50) NOT NULL,
+    CUSTOMER_ID VARCHAR(50),
+    AGENT_ID VARCHAR(50),
+    COMPLAINT_CATEGORY VARCHAR(100),
+    REQUEST_DATE TIMESTAMP,
+    CALL_START_TIME TIMESTAMP,
+    CALL_END_TIME TIMESTAMP,
+    RESOLUTION_STATUS VARCHAR(50),
+    CALL_LOGS_GENERATION_DATE DATE,
+    LAST_UPDATED_AT TIMESTAMP,
+    CREATED_AT TIMESTAMP,
+    LOADED_AT VARCHAR(10)
+);
+
+-- Create social media complaints staging table
+CREATE TABLE SM_COMPLAINTS (
+    SM_COMPLAINT_KEY VARCHAR(64) PRIMARY KEY,
+    COMPLAINT_ID VARCHAR(50) NOT NULL,
+    CUSTOMER_ID VARCHAR(50),
+    AGENT_ID VARCHAR(50),
+    COMPLAINT_CATEGORY VARCHAR(100),
+    RESOLUTION_DATE DATE,
+    RESOLUTION_STATUS VARCHAR(50),
+    REQUEST_DATE TIMESTAMP,
+    MEDIA_CHANNEL VARCHAR(50),
+    MEDIA_COMPLAINT_GENERATION_DATE DATE,
+    LAST_UPDATED_AT TIMESTAMP,
+    CREATED_AT TIMESTAMP,
+    LOADED_AT VARCHAR(10)
+);
+
+-- Create web complaints staging table
+CREATE TABLE WEB_COMPLAINTS (
+    WEB_COMPLAINT_KEY VARCHAR(64) PRIMARY KEY,
+    REQUEST_ID VARCHAR(50) NOT NULL,
+    CUSTOMER_ID VARCHAR(50),
+    AGENT_ID VARCHAR(50),
+    COMPLAINT_CATEGORY VARCHAR(100),
+    REQUEST_DATE TIMESTAMP,
+    RESOLUTION_DATE DATE,
+    RESOLUTION_STATUS VARCHAR(50),
+    WEB_FORM_GENERATION_DATE DATE,
+    LAST_UPDATED_AT TIMESTAMP,
+    CREATED_AT TIMESTAMP,
+    LOADED_AT VARCHAR(10)
+);
+
+-- Verify tables created
+SHOW TABLES;
+```
+
+### Step 5: Create Warehouse
+
+```sql
+-- Create compute warehouse for queries and dbt runs
+CREATE WAREHOUSE COMPUTE_WH WITH
+    WAREHOUSE_SIZE = 'X-SMALL'  -- Smallest size for development
+    AUTO_SUSPEND = 60           -- Suspend after 1 minute of inactivity
+    AUTO_RESUME = TRUE          -- Auto-resume on query
+    INITIALLY_SUSPENDED = TRUE; -- Start suspended to save credits
+
+-- Set as default warehouse
+USE WAREHOUSE COMPUTE_WH;
+```
+
+**Cost Optimization**: X-SMALL warehouse costs ~$2/hour when running. Auto-suspend ensures you only pay when actively querying.
+
+### Step 6: Create Service Account for Airflow
+
+Create dedicated user for pipeline:
+
+```sql
+-- Create role for pipeline
+CREATE ROLE TRANSFORMER;
+
+-- Grant database access
+GRANT USAGE ON DATABASE CORETELECOMS_DB TO ROLE TRANSFORMER;
+GRANT USAGE ON SCHEMA CORETELECOMS_DB.STG TO ROLE TRANSFORMER;
+GRANT USAGE ON SCHEMA CORETELECOMS_DB.ANALYTICS TO ROLE TRANSFORMER;
+
+-- Grant table permissions
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA CORETELECOMS_DB.STG TO ROLE TRANSFORMER;
+GRANT SELECT ON ALL TABLES IN SCHEMA CORETELECOMS_DB.ANALYTICS TO ROLE TRANSFORMER;
+
+-- Grant future permissions (for new tables)
+GRANT SELECT, INSERT, UPDATE, DELETE ON FUTURE TABLES IN SCHEMA CORETELECOMS_DB.STG TO ROLE TRANSFORMER;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA CORETELECOMS_DB.ANALYTICS TO ROLE TRANSFORMER;
+
+-- Grant warehouse access
+GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE TRANSFORMER;
+
+-- Create user
+CREATE USER AIRFLOW_USER
+    PASSWORD = 'YourStrongPassword123'
+    DEFAULT_ROLE = TRANSFORMER
+    DEFAULT_WAREHOUSE = COMPUTE_WH
+    DEFAULT_NAMESPACE = CORETELECOMS_DB.STG;
+
+-- Assign role to user
+GRANT ROLE TRANSFORMER TO USER AIRFLOW_USER;
+```
+
+### Step 7: Connect dbt Cloud to Snowflake
+
+Configure dbt to read from Snowflake and write dimensional models.
+
+#### In dbt Cloud:
+
+1. **Create New Project**:
+   - Go to [dbt Cloud](https://cloud.getdbt.com/)
+   - Click **Create Project**
+   - Connect to your **GitHub repository** (where dbt models are stored)
+
+2. **Configure Snowflake Connection**:
+   - Click **Configure Connection**
+   - Select **Snowflake**
+   - Enter connection details:
+     - **Account**: `abc12345.us-east-1` (your account identifier)
+     - **Database**: `CORETELECOMS_DB`
+     - **Warehouse**: `COMPUTE_WH`
+     - **Role**: `TRANSFORMER`
+     - **Username**: `DBT_USER` (create separate user for dbt)
+     - **Password**: (dbt user password)
+   - Click **Test Connection** → Should succeed
+
+3. **Create dbt Service User** (in Snowflake):
+   ```sql
+   -- Create user specifically for dbt
+   CREATE USER DBT_USER
+       PASSWORD = 'DbtStrongPassword456'
+       DEFAULT_ROLE = TRANSFORMER
+       DEFAULT_WAREHOUSE = COMPUTE_WH
+       DEFAULT_NAMESPACE = CORETELECOMS_DB.ANALYTICS;
+   
+   -- Grant role
+   GRANT ROLE TRANSFORMER TO USER DBT_USER;
+   
+   -- Grant additional permissions for analytics schema
+   GRANT CREATE TABLE ON SCHEMA CORETELECOMS_DB.ANALYTICS TO ROLE TRANSFORMER;
+   GRANT CREATE VIEW ON SCHEMA CORETELECOMS_DB.ANALYTICS TO ROLE TRANSFORMER;
+   ```
+
+4. **Configure Development Environment**:
+   - **Schema**: `DBT_DEV` (dbt creates this for development)
+   - Grant permissions:
+     ```sql
+     -- In Snowflake
+     CREATE SCHEMA CORETELECOMS_DB.DBT_DEV;
+     GRANT ALL ON SCHEMA CORETELECOMS_DB.DBT_DEV TO ROLE TRANSFORMER;
+     ```
+
+5. **Set Up Repository**:
+   - Connect dbt to GitHub repo containing models (in `/models` directory)
+   - Ensure repository structure:
+     ```
+     models/
+     ├── sources.yml          # Source tables from STG schema
+     ├── analytics/
+     │   ├── dim_customers.sql
+     │   ├── dim_agents.sql
+     │   ├── dim_date.sql
+     │   ├── fact_unified_complaint.sql
+     │   └── fact_accumulating_snapshot.sql
+     └── schema.yml
+     ```
+
+6. **Create Production Job**:
+   - Go to **Deploy → Environments**
+   - Click **Create Environment** → Select **Production**
+   - Set schema to `ANALYTICS`
+   - Go to **Deploy → Jobs**
+   - Click **Create Job**
+   - Configure:
+     - **Job Name**: `CoreTelecoms Production`
+     - **Commands**:
+       ```
+       dbt deps
+       dbt run
+       dbt test
+       ```
+     - **Schedule**: Leave unscheduled (Airflow will trigger)
+     - **Generate Docs**: Enable
+   - Save and note **Job ID** (from URL)
+
+7. **Test dbt Connection**:
+   - In dbt Cloud IDE, run: `dbt debug`
+   - Should see: `Connection test: OK connection ok`
+   - Run models: `dbt run`
+   - Verify tables created in Snowflake:
+     ```sql
+     USE SCHEMA CORETELECOMS_DB.ANALYTICS;
+     SHOW TABLES;
+     ```
+
+### Step 8: Verify Snowflake Setup
+
+```sql
+-- Check all schemas exist
+USE DATABASE CORETELECOMS_DB;
+SHOW SCHEMAS;
+
+-- Check staging tables
+USE SCHEMA STG;
+SHOW TABLES;
+
+-- Check analytics schema (after dbt runs)
+USE SCHEMA ANALYTICS;
+SHOW TABLES;
+
+-- Verify warehouse
+SHOW WAREHOUSES;
+
+-- Check user permissions
+SHOW GRANTS TO ROLE TRANSFORMER;
+```
+
+**Expected Results**:
+- ✅ 3 schemas: `STG`, `ANALYTICS`, `DBT_DEV`
+- ✅ 5 staging tables in `STG` schema
+- ✅ Warehouse `COMPUTE_WH` exists and is suspended
+- ✅ Role `TRANSFORMER` has appropriate grants
+- ✅ After dbt runs: dimensional tables in `ANALYTICS` schema
+
+### Snowflake Cost Management
+
+**Free Trial**:
+- $400 credits
+- 30 days
+- No credit card required
+
+**Development Best Practices**:
+- Use X-SMALL warehouse ($2/hour)
+- Enable auto-suspend (60 seconds)
+- Monitor credit usage: **Admin → Usage**
+- Suspend warehouse manually when not in use:
+  ```sql
+  ALTER WAREHOUSE COMPUTE_WH SUSPEND;
+  ```
+
+**Estimated Monthly Costs (Post-Trial)**:
+- X-SMALL warehouse: ~$20/month (1 hour/day usage)
+- Storage (1GB): ~$23/month
+- **Total**: ~$43/month for development
 
 ---
 
@@ -661,48 +979,6 @@ docker compose logs airflow-scheduler
 docker compose logs airflow-webserver
 ```
 
-### 4. Test Connections
-
-In Airflow UI:
-1. Go to **Admin → Connections**
-2. Find each connection
-3. Click **Test** button
-4. Should see green success message
-
-Common issues:
-- **AWS**: Check access keys, region configuration
-- **RDS**: Check security group, host reachability
-- **Snowflake**: Verify account identifier format
-
-### 5. Manual DAG Trigger (Smoke Test)
-
-**⚠️ Important**: Ensure source data exists before triggering.
-
-1. In Airflow UI, find `coretelecoms_dag`
-2. Toggle **ON** (unpause DAG)
-3. Click **▶️ Play** → **Trigger DAG**
-4. Provide execution date or use default
-5. Click **Trigger**
-
-**Monitor Execution**:
-1. Click DAG name → Opens Graph view
-2. Watch tasks turn green (success) or red (failure)
-3. Click task → **Log** to view execution details
-
-**Expected First Run**:
-- `create_all_tables_task`: Creates RDS tables
-- `truncate_conformance_staging_tables_task`: Clears staging
-- `determine_load_type`: Returns first run path
-- `ingest_customer_data_task`: Extracts customers from S3
-- `ingest_agents_data_task`: Extracts agents from Google Sheets
-- `transform_customers_task`: Cleans and validates
-- `load_customers_task`: Loads to RDS
-- ... (similar for agents and complaints)
-- `static_data_gate`: Opens after static loads complete
-- `run_dbt`: Triggers dbt Cloud job
-- `cleanup_checkpoints_task`: Clears Airflow Variables
-
-**Total Duration**: ~10-15 minutes for first run.
 
 ### 6. Verify Data in RDS
 
@@ -751,47 +1027,6 @@ SELECT COUNT(*) FROM dim_agents;
 SELECT COUNT(*) FROM fact_unified_complaint;
 SELECT COUNT(*) FROM fact_accumulating_snapshot;
 ```
-
-### 8. Verify Slack Notifications
-
-Check your Slack channel (e.g., `#dag_alerts`):
-- Should see success messages for each completed task
-- Format: `✅ SUCCESS: {task_id} for CoreTelecoms ({date})`
-- Includes metrics (rows processed, data quality %)
-
----
-
-## Troubleshooting
-
-Common issues and solutions.
-
-### Docker Issues
-
-**Issue**: `docker compose` command not found
-
-**Solution**:
-```bash
-# Use docker-compose (older version)
-docker-compose up -d
-
-# Or upgrade Docker Desktop to v2.0+
-```
-
-**Issue**: Containers fail to start
-
-**Solution**:
-```bash
-# Check logs
-docker compose logs
-
-# Restart services
-docker compose down
-docker compose up -d
-```
-
-### Airflow Issues
-
-**Issue**: DAG not showing in UI
 
 **Solution**:
 1. Check DAG file has no Python syntax errors
@@ -913,80 +1148,6 @@ docker compose up -d
    - Schema changes (rebuild dbt models)
    - Snowflake permissions (grant access to STG schema)
 
-### Data Quality Issues
-
-**Issue**: High quarantine rate (>5%)
-
-**Solution**:
-1. Query quarantine table:
-   ```sql
-   SELECT table_name, COUNT(*) as count
-   FROM data_quality_quarantine
-   GROUP BY table_name;
-   ```
-2. Investigate problematic fields:
-   ```sql
-   SELECT record_data->>'customer_id' as customer_id,
-          COUNT(*) as occurrences
-   FROM data_quality_quarantine
-   WHERE table_name = 'conformed_call_logs'
-   GROUP BY 1
-   ORDER BY 2 DESC;
-   ```
-3. Check source data for issues
-4. Update cleaning logic if needed
-
-**Issue**: FK violations blocking pipeline
-
-**Solution**:
-1. Check quarantine pattern is working (should isolate violations)
-2. Verify customers/agents loaded before complaints
-3. Check gate pattern is functioning:
-   ```python
-   # In Airflow UI, view task logs for determine_load_type
-   # Should see: "First run - agents and customers must load before gate opens"
-   ```
-
-### Memory Issues
-
-**Issue**: Tasks killed with `OOM` error
-
-**Solution**:
-1. Reduce batch size in `transformation.py`:
-   ```python
-   BATCH_SIZE = 50000  # Reduce from 100000
-   ```
-2. Increase Docker memory allocation (Docker Desktop → Settings → Resources)
-3. Use ThreadPool parallelization for large datasets
-
----
-
-## Next Steps
-
-After successful installation:
-
-1. **Configure Scheduling**: Set appropriate schedule for DAG (`@daily`, `@hourly`, etc.)
-2. **Set up Monitoring**: Configure CloudWatch alarms, Datadog integration
-3. **Security Hardening**: Rotate credentials, enable encryption, restrict access
-4. **Backup Strategy**: Configure RDS automated backups, S3 versioning
-5. **Data Quality Monitoring**: Set up alerts for quarantine rate spikes
-6. **Documentation**: Update with any custom configurations
-
----
-
-## Support
-
-For issues not covered in troubleshooting:
-
-1. **Check Airflow Logs**: Most errors have detailed stack traces in logs
-2. **GitHub Issues**: Open issue with error logs and steps to reproduce
-3. **Airflow Documentation**: [Apache Airflow Docs](https://airflow.apache.org/docs/)
-4. **AWS Documentation**: [AWS RDS](https://docs.aws.amazon.com/rds/), [AWS S3](https://docs.aws.amazon.com/s3/)
-
----
-
-## Appendix: Useful Commands
-
 ### Docker Commands
 
 ```bash
@@ -1041,3 +1202,4 @@ terraform destroy
 # Update single resource
 terraform apply -target=aws_s3_bucket.bronze_bucket
 ```
+

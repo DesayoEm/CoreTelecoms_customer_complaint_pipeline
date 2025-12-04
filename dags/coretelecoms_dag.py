@@ -141,7 +141,6 @@ def process_complaint_data():
 
         return extractor.copy_web_complaints()
 
-
     @task
     def create_all_tables_task():
         return create_all_tables()
@@ -170,7 +169,6 @@ def process_complaint_data():
         transformer = Transformer(context=context)
 
         return transformer.transform_entity(metadata["destination"], "web complaints")
-
 
     @task
     def load_call_logs_task():
@@ -226,9 +224,13 @@ def process_complaint_data():
     load_customers_wh = load_customers_task()
     load_agents_wh = load_agents_task()
 
-
-    [transform_customers, transform_agents] >> load_customers_wh >> load_agents_wh >> mark_complete >> open_gate
-
+    (
+        [transform_customers, transform_agents]
+        >> load_customers_wh
+        >> load_agents_wh
+        >> mark_complete
+        >> open_gate
+    )
 
     # COMPLAINT INGESTION CAN RUN INDEPENDENTLY
     raw_call_logs = ingest_call_logs_task()
