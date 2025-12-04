@@ -1,0 +1,66 @@
+version: 2
+models:
+  - name: fact_complaint_transaction
+    description: "Transaction-level fact table for all complaints"
+    columns:
+      - name: complaint_key
+        description: "Unique complaint identifier (surrogate key)"
+        tests:
+          - unique
+          - not_null
+      
+      - name: complaint_id
+        description: "Business key from source system"
+        tests:
+          - not_null
+      
+      - name: customer_key
+        description: "Foreign key to dim_customers"
+        tests:
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_key
+              config:
+                where: "customer_key is not null"
+      
+      - name: agent_key
+        description: "Foreign key to dim_agents"
+        tests:
+          - relationships:
+              to: ref('dim_agents')
+              field: agent_key
+              config:
+                where: "agent_key is not null"
+      
+      - name: complaint_date_key
+        description: "Foreign key to dim_date"
+        tests:
+          - not_null
+      
+      - name: complaint_type
+        description: "Source of complaint"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['call_log', 'social_media', 'web_form']
+      
+      - name: complaint_category
+        description: "Category of complaint"
+        tests:
+          - not_null
+      
+      - name: complaint_date
+        description: "When complaint was created"
+        tests:
+          - not_null
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "complaint_date <= current_date()"
+          name: no_future_complaint_dates
+      
+      - dbt_utils.expression_is_true:
+          expression: "call_start_time <= call_end_time"
+          config:
+            where: "call_start_time is not null and call_end_time is not null"
+          name: call_times_are_logical
