@@ -3,7 +3,7 @@ from typing import Dict
 from airflow.models import Variable
 from pendulum import datetime, duration
 from airflow.sdk.definitions.context import get_current_context
-from include.etl.extraction.s3_extractor import S3Extractor
+from include.etl.extraction.s3_extractor import S3Extractor, Sdrr
 from include.etl.extraction.google_extractor import GoogleSheetsExtractor
 from airflow.providers.dbt.cloud.operators.dbt import DbtCloudRunJobOperator
 from include.etl.extraction.sql_extractor import SQLEXtractor
@@ -134,12 +134,18 @@ def process_complaint_data():
 
         return extractor.copy_social_media_complaint_data()
 
+    # @task
+    # def ingest_web_complaints_data_task():
+    #     context = get_current_context()
+    #     extractor = SQLEXtractor(context=context)
+    #
+    #     return extractor.copy_web_complaints()
+
     @task
     def ingest_web_complaints_data_task():
         context = get_current_context()
-        extractor = SQLEXtractor(context=context)
-
-        return extractor.copy_web_complaints()
+        extractor = Sdrr(context=context)
+        return extractor.copy_web_media_complaints()
 
     @task
     def create_all_tables_task():
@@ -224,8 +230,12 @@ def process_complaint_data():
     load_customers_wh = load_customers_task()
     load_agents_wh = load_agents_task()
 
-    [transform_customers, transform_agents] >> mark_complete
-    mark_complete >> [load_customers_wh, load_agents_wh] >> open_gate
+    (
+        [transform_customers, transform_agents]
+        >> [load_customers_wh, load_agents_wh]
+        >> mark_complete
+        >> open_gate
+    )
 
     # COMPLAINT INGESTION CAN RUN INDEPENDENTLY
     raw_call_logs = ingest_call_logs_task()
