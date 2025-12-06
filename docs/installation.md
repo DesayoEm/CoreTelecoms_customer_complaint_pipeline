@@ -382,7 +382,7 @@ DBT_JOB_ID=123456
 SNOWFLAKE_ACCOUNT=abc12345.us-east-1
 SNOWFLAKE_USER=AIRFLOW_USER
 SNOWFLAKE_PASSWORD=YourStrongPassword123
-SNOWFLAKE_WAREHOUSE=COMPUTE_WH
+SNOWFLAKE_WAREHOUSE=CORETELECOMS_WH
 SNOWFLAKE_DATABASE=CORETELECOMS_DB
 SNOWFLAKE_SCHEMA=STG
 SNOWFLAKE_ROLE=TRANSFORMER
@@ -566,112 +566,22 @@ CREATE SCHEMA ANALYTICS;
 SHOW SCHEMAS;
 ```
 
-### Step 4: Create Staging Tables
-
-These tables receive data from the RDS conformance layer.
-
-```sql
--- Use staging schema
-USE SCHEMA CORETELECOMS_DB.STG;
-
--- Create customers staging table
-CREATE TABLE CUSTOMERS (
-    CUSTOMER_KEY VARCHAR(64) PRIMARY KEY,
-    CUSTOMER_ID VARCHAR(50) NOT NULL,
-    NAME VARCHAR(255),
-    GENDER CHAR(1),
-    DATE_OF_BIRTH DATE,
-    SIGNUP_DATE DATE,
-    EMAIL VARCHAR(255),
-    ADDRESS VARCHAR(500),
-    ZIP_CODE VARCHAR(10),
-    STATE_CODE VARCHAR(3),
-    STATE VARCHAR(100),
-    LAST_UPDATED_AT TIMESTAMP,
-    CREATED_AT TIMESTAMP,
-    LOADED_AT VARCHAR(10)  -- Execution date from Airflow
-);
-
--- Create agents staging table
-CREATE TABLE AGENTS (
-    AGENT_KEY VARCHAR(64) PRIMARY KEY,
-    AGENT_ID VARCHAR(50) NOT NULL,
-    NAME VARCHAR(255),
-    EXPERIENCE VARCHAR(50),
-    STATE VARCHAR(100),
-    LAST_UPDATED_AT TIMESTAMP,
-    CREATED_AT TIMESTAMP,
-    LOADED_AT VARCHAR(10)
-);
-
--- Create call logs staging table
-CREATE TABLE CALL_LOGS (
-    CALL_LOG_KEY VARCHAR(64) PRIMARY KEY,
-    CALL_ID VARCHAR(50) NOT NULL,
-    CUSTOMER_ID VARCHAR(50),
-    AGENT_ID VARCHAR(50),
-    COMPLAINT_CATEGORY VARCHAR(100),
-    REQUEST_DATE TIMESTAMP,
-    CALL_START_TIME TIMESTAMP,
-    CALL_END_TIME TIMESTAMP,
-    RESOLUTION_STATUS VARCHAR(50),
-    CALL_LOGS_GENERATION_DATE DATE,
-    LAST_UPDATED_AT TIMESTAMP,
-    CREATED_AT TIMESTAMP,
-    LOADED_AT VARCHAR(10)
-);
-
--- Create social media complaints staging table
-CREATE TABLE SM_COMPLAINTS (
-    SM_COMPLAINT_KEY VARCHAR(64) PRIMARY KEY,
-    COMPLAINT_ID VARCHAR(50) NOT NULL,
-    CUSTOMER_ID VARCHAR(50),
-    AGENT_ID VARCHAR(50),
-    COMPLAINT_CATEGORY VARCHAR(100),
-    RESOLUTION_DATE DATE,
-    RESOLUTION_STATUS VARCHAR(50),
-    REQUEST_DATE TIMESTAMP,
-    MEDIA_CHANNEL VARCHAR(50),
-    MEDIA_COMPLAINT_GENERATION_DATE DATE,
-    LAST_UPDATED_AT TIMESTAMP,
-    CREATED_AT TIMESTAMP,
-    LOADED_AT VARCHAR(10)
-);
-
--- Create web complaints staging table
-CREATE TABLE WEB_COMPLAINTS (
-    WEB_COMPLAINT_KEY VARCHAR(64) PRIMARY KEY,
-    REQUEST_ID VARCHAR(50) NOT NULL,
-    CUSTOMER_ID VARCHAR(50),
-    AGENT_ID VARCHAR(50),
-    COMPLAINT_CATEGORY VARCHAR(100),
-    REQUEST_DATE TIMESTAMP,
-    RESOLUTION_DATE DATE,
-    RESOLUTION_STATUS VARCHAR(50),
-    WEB_FORM_GENERATION_DATE DATE,
-    LAST_UPDATED_AT TIMESTAMP,
-    CREATED_AT TIMESTAMP,
-    LOADED_AT VARCHAR(10)
-);
-
--- Verify tables created
-SHOW TABLES;
-```
-
-### Step 5: Create Warehouse
+### Step 3: Create Warehouse
 
 ```sql
 -- Create compute warehouse for queries and dbt runs
-CREATE WAREHOUSE COMPUTE_WH WITH
-    WAREHOUSE_SIZE = 'X-SMALL'  -- Smallest size for development
-    AUTO_SUSPEND = 60           -- Suspend after 1 minute of inactivity
-    AUTO_RESUME = TRUE          -- Auto-resume on query
-    INITIALLY_SUSPENDED = TRUE; -- Start suspended to save credits
+CREATE WAREHOUSE CORETELECOMS_WH WITH
+    WAREHOUSE_SIZE = 'X-SMALL'  
+    AUTO_SUSPEND = 60           
+    AUTO_RESUME = TRUE          
+    INITIALLY_SUSPENDED = TRUE; 
 
 -- Set as default warehouse
-USE WAREHOUSE COMPUTE_WH;
+USE WAREHOUSE CORETELECOMS_WH;
 ```
-### Step 6: Create Service Account for Airflow
+
+
+### Step 4: Create Service Account for Airflow
 
 Create dedicated user for pipeline:
 
@@ -693,20 +603,120 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON FUTURE TABLES IN SCHEMA CORETELECOMS_DB.
 GRANT SELECT ON FUTURE TABLES IN SCHEMA CORETELECOMS_DB.ANALYTICS TO ROLE TRANSFORMER;
 
 -- Grant warehouse access
-GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE TRANSFORMER;
+GRANT USAGE ON WAREHOUSE CORETELECOMS_WH TO ROLE TRANSFORMER;
 
 -- Create user
 CREATE USER AIRFLOW_USER
     PASSWORD = 'YourStrongPassword123'
     DEFAULT_ROLE = TRANSFORMER
-    DEFAULT_WAREHOUSE = COMPUTE_WH
+    DEFAULT_WAREHOUSE = CORETELECOMS_WH
     DEFAULT_NAMESPACE = CORETELECOMS_DB.STG;
 
 -- Assign role to user
 GRANT ROLE TRANSFORMER TO USER AIRFLOW_USER;
 ```
 
-### Step 7: Connect dbt Cloud to Snowflake
+### Step 5: Create Staging Tables
+
+These tables receive data from the RDS conformance layer.
+
+```sql
+use database coretelecoms_db;
+
+CREATE SCHEMA stg;
+CREATE SCHEMA analysis;
+CREATE SCHEMA ml_features;
+
+CREATE OR REPLACE TABLE customers (
+    customer_key VARCHAR(100) PRIMARY KEY,
+    customer_id VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    gender CHAR(1) NOT NULL,
+    date_of_birth DATE,
+    signup_date DATE,
+    email VARCHAR(255),
+    address VARCHAR(500),
+    zip_code VARCHAR(5),
+    state_code VARCHAR(2),
+    state VARCHAR(50),
+    last_updated_at TIMESTAMP,
+    created_at TIMESTAMP,
+    loaded_at TIMESTAMP
+)
+CLUSTER BY (created_at, last_updated_at);
+
+CREATE OR REPLACE TABLE agents (
+    agent_key VARCHAR(100) PRIMARY KEY,
+    agent_id VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    experience VARCHAR(50),
+    state VARCHAR(50),
+    last_updated_at TIMESTAMP,
+    created_at TIMESTAMP,
+    loaded_at TIMESTAMP
+)
+CLUSTER BY (created_at, last_updated_at);
+
+
+CREATE OR REPLACE TABLE sm_complaints (
+    sm_complaint_key VARCHAR(100) PRIMARY KEY,
+    complaint_id VARCHAR(100) UNIQUE NOT NULL,
+    customer_id VARCHAR(100),
+    agent_id VARCHAR(100),
+    complaint_category VARCHAR(50),
+    media_channel VARCHAR(50),
+    request_date DATE,
+    resolution_date DATE,
+    resolution_status VARCHAR(50),
+    media_complaint_generation_date DATE,
+    last_updated_at TIMESTAMP,
+    created_at TIMESTAMP,
+    loaded_at TIMESTAMP
+)
+CLUSTER BY (created_at, last_updated_at);
+
+CREATE OR REPLACE TABLE web_complaints (
+    web_complaint_key VARCHAR(100) PRIMARY KEY,
+    request_id VARCHAR(100) UNIQUE NOT NULL,
+    customer_id VARCHAR(100),
+    agent_id VARCHAR(100),
+    complaint_category VARCHAR(100),
+    request_date DATE,
+    resolution_date DATE,
+    resolution_status VARCHAR(50),
+    web_form_generation_date DATE,
+    last_updated_at TIMESTAMP,
+    created_at TIMESTAMP,
+    loaded_at TIMESTAMP
+)
+CLUSTER BY (created_at, last_updated_at);
+
+
+CREATE OR REPLACE TABLE call_logs (
+    call_log_key VARCHAR(100) PRIMARY KEY,
+    call_id VARCHAR(100) UNIQUE NOT NULL,
+    customer_id VARCHAR(100),
+    agent_id VARCHAR(100),
+    complaint_category VARCHAR(100),
+    call_start_time TIMESTAMP,
+    call_end_time TIMESTAMP,
+    request_date DATE,
+    resolution_status VARCHAR(50),
+    call_logs_generation_date DATE,
+    last_updated_at TIMESTAMP,
+    created_at TIMESTAMP,
+    loaded_at TIMESTAMP
+)
+CLUSTER BY (created_at, last_updated_at);
+
+
+
+-- Verify tables created
+SHOW TABLES IN SCHEMA STG;
+```
+
+
+### Step 6: Connect dbt Cloud to Snowflake
 
 Configure dbt to read from Snowflake and write dimensional models.
 
@@ -723,7 +733,7 @@ Configure dbt to read from Snowflake and write dimensional models.
    - Enter connection details:
      - **Account**: `abc12345.us-east-1` (your account identifier)
      - **Database**: `CORETELECOMS_DB`
-     - **Warehouse**: `COMPUTE_WH`
+     - **Warehouse**: `CORETELECOMS_WH`
      - **Role**: `TRANSFORMER`
      - **Username**: `DBT_USER` (create separate user for dbt)
      - **Password**: (dbt user password)
@@ -735,7 +745,7 @@ Configure dbt to read from Snowflake and write dimensional models.
    CREATE USER DBT_USER
        PASSWORD = 'DbtStrongPassword456'
        DEFAULT_ROLE = TRANSFORMER
-       DEFAULT_WAREHOUSE = COMPUTE_WH
+       DEFAULT_WAREHOUSE = CORETELECOMS_WH
        DEFAULT_NAMESPACE = CORETELECOMS_DB.ANALYTICS;
    
    -- Grant role
@@ -794,10 +804,6 @@ Configure dbt to read from Snowflake and write dimensional models.
 USE DATABASE CORETELECOMS_DB;
 SHOW SCHEMAS;
 
--- Check staging tables
-USE SCHEMA STG;
-SHOW TABLES;
-
 -- Check analytics schema (after dbt runs)
 USE SCHEMA ANALYTICS;
 SHOW TABLES;
@@ -812,7 +818,7 @@ SHOW GRANTS TO ROLE TRANSFORMER;
 **Expected Results**:
 - 3 schemas: `STG`, `ANALYTICS`, `DBT_DEV`
 - 5 staging tables in `STG` schema
-- Warehouse `COMPUTE_WH` exists and is suspended
+- Warehouse `CORETELECOMS_WH` exists and is suspended
 - Role `TRANSFORMER` has appropriate grants
 - After dbt runs: dimensional tables in `ANALYTICS` schema
 
@@ -826,136 +832,21 @@ Initialize the Silver conformance layer schema in RDS PostgreSQL.
 ### Step 1: Connect to RDS
 
 ```bash
-# Using psql (install if needed)
+# Using psql
 psql -h your-rds-endpoint.us-east-1.rds.amazonaws.com -U postgres -d silver_db
 
 # Or from Docker container
 docker compose exec airflow-webserver psql -h your-rds-endpoint -U postgres -d silver_db
 ```
 
-### Step 2: Run Initialization Script
-
-```bash
-# From project root
-psql -h your-rds-endpoint -U postgres -d silver_db -f scripts/init_silver_schema.sql
-```
-
-**Alternative**: Execute SQL directly in psql session:
-
-```sql
-\i scripts/init_silver_schema.sql
-```
-
-### What Gets Created
-
-The initialization script creates:
-
-**Staging Schema**:
-- `staging_customers`
-- `staging_agents`
-- `staging_call_logs`
-- `staging_sm_complaints`
-- `staging_web_complaints`
-
-**Conformed Schema** (with constraints):
-- `conformed_customers` (with surrogate keys, SCD Type 1)
-- `conformed_agents` (with surrogate keys, SCD Type 1)
-- `conformed_call_logs` (with FK constraints to customers/agents)
-- `conformed_sm_complaints` (with FK constraints)
-- `conformed_web_complaints` (with FK constraints)
-
-**Data Quality**:
-- `data_quality_quarantine` (JSONB storage for orphaned records)
-
-### Verify Schema Creation
-
-```sql
--- List all tables
-\dt
-
--- Check table structure
-\d conformed_customers
-\d data_quality_quarantine
-
--- Verify indexes
-\di
-```
-
----
-
 ## Verification
 
-Verify the installation is working correctly.
 
-### 1. Check Airflow Services
-
-```bash
-docker compose ps
-```
-
-All services should be `Up` or `healthy`:
-- `airflow-webserver`
-- `airflow-scheduler`
-- `airflow-worker` (if using CeleryExecutor)
-- `postgres` (Airflow metadata DB)
-- `redis` (if using CeleryExecutor)
-
-### 2. Access Airflow UI
-
-Navigate to http://localhost:8080
-
-Should see:
-- Login page (or DAGs page if already logged in)
-- No error messages in browser console
-
-### 3. Verify DAG Loading
-
-In Airflow UI:
-1. Go to **DAGs** page
-2. Locate `coretelecoms_dag`
-3. Status should be **green** (DAG parsed successfully)
-4. If **red**: Check Airflow logs for import errors
-
-```bash
-# View scheduler logs
-docker compose logs airflow-scheduler
-
-# View webserver logs
-docker compose logs airflow-webserver
-```
-
-
-### 6. Verify Data in RDS
-
-```sql
--- Connect to RDS
-psql -h your-rds-endpoint -U postgres -d silver_db
-
--- Check row counts
-SELECT 'customers' as table_name, COUNT(*) as row_count FROM conformed_customers
-UNION ALL
-SELECT 'agents', COUNT(*) FROM conformed_agents
-UNION ALL
-SELECT 'call_logs', COUNT(*) FROM conformed_call_logs
-UNION ALL
-SELECT 'sm_complaints', COUNT(*) FROM conformed_sm_complaints
-UNION ALL
-SELECT 'web_complaints', COUNT(*) FROM conformed_web_complaints;
-
--- Check for quarantined records
-SELECT COUNT(*) as quarantined_count FROM data_quality_quarantine;
-```
-
-**Expected**:
-- Customers: >0 rows
-- Agents: >0 rows
-- Complaints: >0 rows
-- Quarantine: 0 (or small number if source data has issues)
-
-### 7. Verify Data in Snowflake
+### . Verify Data in Snowflake
 
 ```sql
 -- In Snowflake worksheet
+USE WAREHOUSE CORETELECOMS_WH;
 USE DATABASE CORETELECOMS_DB;
 USE SCHEMA STG;
 
@@ -963,12 +854,15 @@ USE SCHEMA STG;
 SELECT COUNT(*) FROM customers;
 SELECT COUNT(*) FROM agents;
 SELECT COUNT(*) FROM call_logs;
+SELECT COUNT(*) FROM sm_complaints;
+SELECT COUNT(*) FROM web_complaints;
 
 -- Check analytics schema (after dbt runs)
 USE SCHEMA ANALYTICS;
 
 SELECT COUNT(*) FROM dim_customers;
 SELECT COUNT(*) FROM dim_agents;
+SELECT COUNT(*) FROM dim_date;
 SELECT COUNT(*) FROM fact_unified_complaint;
 SELECT COUNT(*) FROM fact_accumulating_snapshot;
 ```
